@@ -1,0 +1,6 @@
+Data type: Paige
+Number of first points to cut: 2
+Trajectories length:
+     Max length: 157
+     Min length: 92
+     Mean length: 121.81871345029239

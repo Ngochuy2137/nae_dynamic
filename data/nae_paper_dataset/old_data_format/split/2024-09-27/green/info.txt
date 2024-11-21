@@ -1,0 +1,6 @@
+Data type: Green
+Number of first points to cut: 2
+Trajectories length:
+     Max length: 149
+     Min length: 86
+     Mean length: 115.58273381294964

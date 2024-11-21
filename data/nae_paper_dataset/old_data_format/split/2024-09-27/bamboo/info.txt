@@ -1,0 +1,6 @@
+Data type: Bamboo
+Number of first points to cut: 2
+Trajectories length:
+     Max length: 146
+     Min length: 82
+     Mean length: 116.02380952380952

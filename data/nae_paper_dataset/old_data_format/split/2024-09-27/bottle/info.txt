@@ -1,0 +1,6 @@
+Data type: Bottle
+Number of first points to cut: 2
+Trajectories length:
+     Max length: 138
+     Min length: 77
+     Mean length: 105.92173913043479

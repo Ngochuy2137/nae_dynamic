@@ -1,0 +1,6 @@
+Data type: Gourd
+Number of first points to cut: 2
+Trajectories length:
+     Max length: 175
+     Min length: 29
+     Mean length: 120.77832512315271

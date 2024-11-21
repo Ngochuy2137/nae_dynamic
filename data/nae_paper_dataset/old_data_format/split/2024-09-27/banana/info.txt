@@ -1,0 +1,6 @@
+Data type: Banana
+Number of first points to cut: 2
+Trajectories length:
+     Max length: 153
+     Min length: 65
+     Mean length: 100.23392612859097
