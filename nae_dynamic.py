@@ -12,9 +12,9 @@ from datetime import datetime
 import wandb
 import random
 
-from nae.utils.utils import NAE_Utils
-from nae.utils.submodules.training_utils.data_loader import DataLoader as NAEDataLoader
-from nae.utils.submodules.training_utils.input_label_dynamic_generator import InputLabelDynamicGenerator
+from utils.utils import NAE_Utils
+from utils.submodules.training_utils.data_loader import DataLoader as NAEDataLoader
+from utils.submodules.training_utils.input_label_dynamic_generator import InputLabelDynamicGenerator
 
 DEVICE = torch.device("cuda")
 
@@ -52,10 +52,11 @@ def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
  
 class NAE:
-    def __init__(self, input_size, hidden_size, output_size, num_layers_lstm, lr,
-                 input_len, future_pred_len, num_epochs, batch_size_train, batch_size_val, save_interval, thrown_object,
-                 device,
-                 data_dir=''):
+    def __init__(self, step_begin_data_dyn, step_increment_data_dyn,                            # data params
+                 input_size, hidden_size, output_size, num_layers_lstm, lr,                     # model architecture params
+                 num_epochs, batch_size_train, batch_size_val, save_interval, thrown_object,    # training params
+                 data_dir='',
+                 device='cuda'):
         
         self.utils = NAE_Utils()
         self.device = device
@@ -67,8 +68,8 @@ class NAE:
         self.lr = lr
 
         # training params
-        self.t_value = input_len
-        self.k_value = future_pred_len
+        self.step_begin_data_dyn = step_begin_data_dyn
+        self.step_increment_data_dyn = step_increment_data_dyn
         self.num_epochs = num_epochs
         self.batch_size_train = batch_size_train
         self.batch_size_val = batch_size_val
@@ -76,7 +77,7 @@ class NAE:
         self.thrown_object = thrown_object + '_model'
         self.data_dir = data_dir
 
-        self.run_name = f"model_{datetime.now().strftime('%d-%m-%Y_%H-%M-%S')}_hiddensize{hidden_size}_inseq{input_len}_outpred{future_pred_len}"
+        self.run_name = f"model_{datetime.now().strftime('%d-%m-%Y_%H-%M-%S')}_hiddensize{hidden_size}_NAE_DYNAMIC"
         self.model_dir = os.path.join('models', self.thrown_object, self.run_name)
 
         # Init model
@@ -120,6 +121,8 @@ class NAE:
             "past length": self.t_value,
             "future prediction length (k_var steps in the future)": self.k_value,
             "start_time": datetime.now().strftime("%d-%m-%Y_%H-%M-%S"),
+            "step_begin_data_dyn": self.step_begin_data_dyn,
+            "step_increment_data_dyn": self.step_increment_data_dyn,
             "my_notes": wdb_notes
             }
         )
@@ -260,13 +263,14 @@ class NAE:
                 "scored_mean_final_dist": mean_final_step_err,
                 "scored_mean_nade_future": mean_nade_future,
                 "capture_success_rate": capture_success_rate,
+                "traing_time_mins": traing_time/60,
                 },
                 step=epoch
             )
 
             if (epoch) % 10 == 0:
                 print('\n-----------------------------------')
-                print(f'Epoch [{epoch}/{self.num_epochs}], Loss: {loss_total_train_log:.6f}, traing time: {traing_time:.2f} s ({traing_time/(traing_time+validate_time)*100} %), validate time: {validate_time:.2f} s ({validate_time/(traing_time+validate_time)*100} %)')
+                print(f'Epoch [{epoch}/{self.num_epochs}], Loss: {loss_total_train_log:.6f}, traing time: {traing_time/60:.2f} mins ({traing_time/(traing_time+validate_time)*100} %), validate time: {validate_time:.2f} s ({validate_time/(traing_time+validate_time)*100} %)')
             
         final_model_dir = self.save_model(epoch, len(data_train), start_t, loss_all_data)
         wandb.finish()
@@ -474,18 +478,19 @@ def main():
     data_folder = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_prediction_ws/src/nae/data/new_dataset_no_orientation/big_plane/min_len_65/new_data_format/big_plane'
 
     # Learning parameters
-    step_begin_dynamic_nae = 1
-    step_increment_dynamic_nae = 1
+    step_begin_data_dyn = 1
+    step_increment_data_dyn = 1
+    data_params = {
+        'step_begin': step_begin_data_dyn,
+        'step_increment': step_increment_data_dyn
+    }
 
-    future_pred_len = 35
     training_params = {
-        'input_len': step_begin_dynamic_nae,
-        'future_pred_len': step_increment_dynamic_nae,
-        'num_epochs': 10000,
-        'batch_size_train': 512,    
+        'num_epochs': 5000,
+        'batch_size_train': 128,    
         'batch_size_val': 128,
         'save_interval': 10,
-        'thrown_object' : thrown_object + '-input-' + str(step_begin_dynamic_nae) + 'pred-' + str(step_increment_dynamic_nae)
+        'thrown_object' : thrown_object
     }
     # Wandb parameters
     wdb_run_id=None   # 't5nlloi0'
@@ -495,7 +500,7 @@ def main():
         'hidden_size': 128,
         'output_size': 9,
         'num_layers_lstm': 2,
-        'lr': 0.0002
+        'lr': 0.0001
     }
 
     # load data
@@ -508,26 +513,26 @@ def main():
     print('     Training data:      ', len(data_train))
     print('     Validation data:    ', len(data_val))
     print('     Testing data:       ', len(data_test))
-    print('     input_len:         ', training_params['input_len'])
-    print('     future_pred_len:   ', training_params['future_pred_len'])
+    print('     step_begin:         ', training_params['step_begin'])
+    print('     step_increment:     ', training_params['step_increment'])
     print('     ----------------\n')
 
     # generate input and label sequences
     input_label_dynamic_enerator = InputLabelDynamicGenerator()
     data_train  = input_label_dynamic_enerator.create_dynamic_input_label_pairs(data_train, 
-                                                                                step_begin=step_begin_dynamic_nae, 
-                                                                                increment=step_increment_dynamic_nae)
+                                                                                step_begin=step_begin_data_dyn, 
+                                                                                increment=step_increment_data_dyn)
     data_val    = input_label_dynamic_enerator.create_dynamic_input_label_pairs(data_val, 
-                                                                                step_begin=step_begin_dynamic_nae, 
-                                                                                increment=step_increment_dynamic_nae)
+                                                                                step_begin=step_begin_data_dyn, 
+                                                                                increment=step_increment_data_dyn)
     data_test   = input_label_dynamic_enerator.create_dynamic_input_label_pairs(data_test,
-                                                                                step_begin=step_begin_dynamic_nae, 
-                                                                                increment=step_increment_dynamic_nae)
+                                                                                step_begin=step_begin_data_dyn, 
+                                                                                increment=step_increment_data_dyn)
     
     print('     ----- After generating inputs, labels -----')
-    print('     Training data:      ', data_train[0].shape, ' ', data_train[1].shape)
-    print('     Validation data:    ', data_val[0].shape, ' ', data_val[1].shape)
-    print('     Testing data:       ', data_test[0].shape, ' ', data_test[1].shape)
+    print('     Training data:      ', len(data_train[0]), ' ', len(data_train[1]))
+    print('     Validation data:    ', len(data_val[0]), ' ', len(data_val[1]))
+    print('     Testing data:       ', len(data_test[0]), ' ', len(data_test[1]))
     print('     ----------------\n')
 
     # test_plot = [data_val[0][15], data_val[1][15]]
@@ -537,8 +542,8 @@ def main():
     # ===================== TRAINING =====================
     print('TRAINING NAE MODEL')
     wdb_notes = f'{model_params["num_layers_lstm"]} LSTM layers, {model_params["hidden_size"]} hidden size, lr={model_params["lr"]}, batch_size={training_params["batch_size_train"]}'
-    nae = NAE(**model_params, **training_params, data_dir=data_folder, device=DEVICE)
-    nae.init_wandb(project_name='nae',
+    nae = NAE(**data_params, **model_params, **training_params, data_dir=data_folder, device=DEVICE)
+    nae.init_wandb(project_name='nae-dynamic',
                    run_id=wdb_run_id, 
                    resume=wdb_resume,
                    wdb_notes=wdb_notes)
