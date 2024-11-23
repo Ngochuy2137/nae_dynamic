@@ -102,7 +102,9 @@ class NAE:
         print('Parameters number of decoder: ', count_parameters(self.decoder))
         print('Total number of parameters: ', count_parameters(self.encoder) + count_parameters(self.lstm) + count_parameters(self.decoder))
 
-    def init_wandb(self, project_name, run_id=None, resume=None, wdb_notes=''):        
+    def init_wandb(self, project_name, run_id=None, resume=None, wdb_notes='', enable=False):    
+        if not enable:
+            return    
         wandb.init(
             # set the wandb project where this run will be logged
             project = project_name,
@@ -546,7 +548,7 @@ def main():
     nae.init_wandb(project_name='nae-dynamic',
                    run_id=wdb_run_id, 
                    resume=wdb_resume,
-                   wdb_notes=wdb_notes)
+                   wdb_notes=wdb_notes, enable=False)
 
     checkpoint_path = None
     saved_model_dir = nae.train(data_train, data_val, checkpoint_path=checkpoint_path)
