@@ -30,7 +30,9 @@ class TimeSeriesDataset(Dataset):
 class MultiStepLSTM(nn.Module):
     def __init__(self, input_dim, hidden_dim):
         super(MultiStepLSTM, self).__init__()
-        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True)
+        self.fc_encoder = nn.Linear(input_dim, hidden_dim)
+        self.lstm = nn.LSTM(hidden_dim, hidden_dim, batch_first=True)
+        self.fc_decoder = nn.Linear(hidden_dim, input_dim)
 
     def forward(self, x, lengths, target_length):
 
@@ -41,6 +43,8 @@ class MultiStepLSTM(nn.Module):
         # input()
         # Bước đầu tiên: Dùng input ban đầu
         packed_x = pack_padded_sequence(x, lengths, batch_first=True, enforce_sorted=False)
+        print('packed_x shape: ', packed_x.data.shape)
+        input()
         lstm_out, (h_n, c_n) = self.lstm(packed_x)
         lstm_out, _ = pad_packed_sequence(lstm_out, batch_first=True)
 
