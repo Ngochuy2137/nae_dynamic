@@ -7,11 +7,10 @@ import random
 
 from python_utils.python_utils.printer import Printer
 
-HIDEN_DIM = 32
 DEVICE = torch.device('cuda')
 
 class TimeSeriesDataset(Dataset):
-    def __init__(self, num_samples=100, max_len=10):
+    def __init__(self, num_samples=100, max_len=10, hidden_dim=32):
         self.data = []
         for _ in range(num_samples):
             seq_len_in = random.randint(3, max_len)
@@ -19,9 +18,9 @@ class TimeSeriesDataset(Dataset):
 
             # print('check seq_len_in, seq_len_out shape: ', seq_len_in, seq_len_out)
             # input()
-            input_seq = torch.rand(seq_len_in, HIDEN_DIM)  # 1 feature per timestep
+            input_seq = torch.rand(seq_len_in, hidden_dim)  # 1 feature per timestep
             label_teafo_seq = input_seq.clone()
-            label_aureg_seq = torch.rand(seq_len_out, HIDEN_DIM)  # Output sequence
+            label_aureg_seq = torch.rand(seq_len_out, hidden_dim)  # Output sequence
             self.data.append((input_seq, label_teafo_seq, label_aureg_seq))
         
     def __len__(self):
@@ -29,10 +28,33 @@ class TimeSeriesDataset(Dataset):
     
     def __getitem__(self, idx):
         return self.data[idx]
+
+class Encoder(nn.Module):
+    def __init__(self, input_size, hidden_size):
+        super(Encoder, self).__init__()
+        self.fc = nn.Linear(input_size, hidden_size)
+        self.tanh = nn.Tanh()
+
+    def forward(self, x):
+        out = self.fc(x)
+        out = self.tanh(out)
+        return out
     
-class MultiStepLSTM(nn.Module):
+class Decoder(nn.Module):
+    def __init__(self, hidden_size, output_size):
+        super(Decoder, self).__init__()
+        self.fc = nn.Linear(hidden_size, output_size)
+
+    def forward(self, x):
+        out = self.fc(x)
+        return out
+
+class VLSLSTM(nn.Module):
+    '''
+    Variable-Length Sequence LSTM class
+    '''
     def __init__(self, input_size, hidden_size, num_layers):
-        super(MultiStepLSTM, self).__init__()
+        super(VLSLSTM, self).__init__()
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers=num_layers, batch_first=True)
         self.num_layers = num_layers
         self.hidden_size = hidden_size
@@ -119,7 +141,6 @@ class MultiStepLSTM(nn.Module):
         batch_size = input_aureg_init.size(0)
         max_len = lengths.max().item()
         hidden_size = self.lstm.hidden_size
-        num_layers = self.lstm.num_layers
 
         # Tạo mask cho từng bước
         mask = torch.arange(max_len).unsqueeze(0).to(lengths.device) < lengths.unsqueeze(1)
@@ -176,91 +197,112 @@ class MultiStepLSTM(nn.Module):
     
 
 #------------------------- TRAINING -------------------------
-
-def collate_pad_fn(batch):
-    inputs, labels_teafo, labels_aureg = zip(*batch)
-    # labels_teafo = [label[:len(input)] for input, label in zip(inputs, labels)]
-    # labels_aureg = [label[len(input):] for input, label in zip(inputs, labels)]
-
-    lengths_in = [len(seq) for seq in inputs]
-    lengths_teafo = [len(seq) for seq in labels_teafo]
-
-    for lin, lte in zip(lengths_in, lengths_teafo):
-        if lin != lte:
-            print('check lengths_in, lengths_teafo: ', lin, lte)
-            return
-    lengths_aureg = [len(seq) for seq in labels_aureg]
-    
-    # Padding sequences to have same length in batch
-    inputs_pad = pad_sequence(inputs, batch_first=True)  # Shape: (batch_size, max_seq_len_in, 1)
-    # labels_pad = pad_sequence(labels, batch_first=True)  # Shape: (batch_size, max_seq_len_out, 1)
-    labels_teafo_pad = pad_sequence(labels_teafo, batch_first=True)
-    labels_aureg_pad = pad_sequence(labels_aureg, batch_first=True)
-
-    
-    return inputs_pad, labels_teafo_pad, labels_aureg_pad, lengths_teafo, lengths_aureg
-
-
-util_printer = Printer()
-# 1. Dataset and DataLoader
-dataset = TimeSeriesDataset(num_samples=100, max_len=15)
-dataloader = DataLoader(dataset, batch_size=4, collate_fn=lambda x: collate_pad_fn(x), shuffle=True)
-
-# 2. Initialize model, loss, optimizer
-model = MultiStepLSTM(input_size=HIDEN_DIM, hidden_size=HIDEN_DIM, num_layers=2).to(DEVICE)
-criterion = nn.MSELoss(reduction='none').to(DEVICE)  # NOTE: Reduction 'none' to apply masking, default is 'mean'
-optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-# 3. Training loop
-num_epochs = 1000
-for epoch in range(num_epochs):
-    loss_epoch_log = 0
-    for batch in dataloader:
-        # print('-----')
-        inputs, labels_teafo_pad, labels_aureg_pad, lengths_teafo, lengths_aureg = batch
-        inputs = inputs.to(DEVICE)
-        labels_teafo_pad = labels_teafo_pad.to(DEVICE)
-        labels_aureg_pad = labels_aureg_pad.to(DEVICE)
-        lengths_teafo, lengths_aureg = torch.tensor(lengths_teafo, dtype=torch.int64), torch.tensor(lengths_aureg, dtype=torch.int64)
-
-        output_teafo_pad, out_aureg_pad = model(inputs.float(), lengths_teafo, lengths_aureg)
-
-
-
-        # Tạo mask dựa trên chiều dài thực
-        mask_teafo = torch.arange(max(lengths_teafo)).expand(len(lengths_teafo), max(lengths_teafo)) < torch.tensor(lengths_teafo).unsqueeze(1) # shape: (batch_size, max_seq_len_out)
-        mask_aureg = torch.arange(max(lengths_aureg)).expand(len(lengths_aureg), max(lengths_aureg)) < torch.tensor(lengths_aureg).unsqueeze(1) # shape: (batch_size, max_seq_len_out)
-        # mask = mask.to(labels.device).unsqueeze(2).expand(-1, -1, HIDEN_DIM)  # Mở rộng theo feature
-
+class NAEDynamicLSTM():
+    def __init__(self, input_size, hidden_size, num_layers_lstm, lr, device=torch.device('cuda')):
+        self.device = device
         
-        # print('LOSS 1: ')
-        # print(f'        lengths_teafo: {lengths_teafo}')
-        # print(f'        output_teafo_pad shape: {output_teafo_pad.shape}')
-        loss_1 = criterion(output_teafo_pad, labels_teafo_pad).sum(dim=-1)  # Shape: (batch_size, max_seq_len_out)
+        self.encoder = Encoder(input_size, hidden_size).to(device)
+        self.vls_lstm = VLSLSTM(input_size, hidden_size, num_layers_lstm).to(device)
+        self.decoder = Decoder(hidden_size, input_size).to(device)
+
+        # # Initialize model, loss, optimizer
+        self.criterion = nn.MSELoss(reduction='none').to(device)  # NOTE: Reduction 'none' to apply masking, default is 'mean'
+        self.optimizer = optim.Adam(list(self.encoder.parameters()) + list(self.vls_lstm.parameters()) + list(self.decoder.parameters()), lr=lr)
+
+        self.util_printer = Printer()
 
 
-        # print('LOSS 2: ')
-        # print(f'        lengths_aureg: {lengths_aureg}')
-        # print(f'        out_aureg_pad shape: {out_aureg_pad.shape}')
-        loss_2 = criterion(out_aureg_pad, labels_aureg_pad).sum(dim=-1)
+    def collate_pad_fn(self, batch):
+        inputs, labels_teafo, labels_aureg = zip(*batch)
+        # labels_teafo = [label[:len(input)] for input, label in zip(inputs, labels)]
+        # labels_aureg = [label[len(input):] for input, label in zip(inputs, labels)]
 
-        # change device of mask
-        mask_teafo = mask_teafo.to(loss_1.device)
-        loss_1_mask = loss_1 * mask_teafo  # Masked loss
-        loss_1_mean = loss_1_mask.sum() / mask_teafo.sum()
+        lengths_in = [len(seq) for seq in inputs]
+        lengths_teafo = [len(seq) for seq in labels_teafo]
 
-        mask_aureg = mask_aureg.to(loss_2.device)
-        loss_2_mask = loss_2 * mask_aureg
-        loss_2_mean = loss_2_mask.sum() / mask_aureg.sum()
+        for lin, lte in zip(lengths_in, lengths_teafo):
+            if lin != lte:
+                print('check lengths_in, lengths_teafo: ', lin, lte)
+                return
+        lengths_aureg = [len(seq) for seq in labels_aureg]
+        
+        # Padding sequences to have same length in batch
+        inputs_pad = pad_sequence(inputs, batch_first=True)  # Shape: (batch_size, max_seq_len_in, 1)
+        # labels_pad = pad_sequence(labels, batch_first=True)  # Shape: (batch_size, max_seq_len_out, 1)
+        labels_teafo_pad = pad_sequence(labels_teafo, batch_first=True)
+        labels_aureg_pad = pad_sequence(labels_aureg, batch_first=True)
+        
+        return inputs_pad, labels_teafo_pad, labels_aureg_pad, lengths_teafo, lengths_aureg
 
-        loss_mean = loss_1_mean + loss_2_mean
+    def train(self, num_epochs, dataset):
+        self.encoder.train()
+        self.vls_lstm.train()
+        self.decoder.train()
 
-        # Backward pass
-        optimizer.zero_grad()
-        loss_mean.backward()
-        optimizer.step()
+        dataloader = DataLoader(dataset, batch_size=4, collate_fn=lambda x: self.collate_pad_fn(x), shuffle=True)
+        for epoch in range(num_epochs):
+            loss_epoch_log = 0
+            for batch in dataloader:
+                # print('-----')
+                inputs, labels_teafo_pad, labels_aureg_pad, lengths_teafo, lengths_aureg = batch
+                inputs = inputs.to(DEVICE)
+                labels_teafo_pad = labels_teafo_pad.to(DEVICE)
+                labels_aureg_pad = labels_aureg_pad.to(DEVICE)
+                lengths_teafo, lengths_aureg = torch.tensor(lengths_teafo, dtype=torch.int64), torch.tensor(lengths_aureg, dtype=torch.int64)
 
-        loss_epoch_log += loss_mean.item()
+                output_teafo_pad, out_aureg_pad = self.vls_lstm(inputs.float(), lengths_teafo, lengths_aureg)
 
-        # print loss
-    util_printer.print_green(f"\nEpoch {epoch+1}, loss: {loss_epoch_log:.4f}")
+
+
+                # Tạo mask dựa trên chiều dài thực
+                mask_teafo = torch.arange(max(lengths_teafo)).expand(len(lengths_teafo), max(lengths_teafo)) < lengths_teafo.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
+                mask_aureg = torch.arange(max(lengths_aureg)).expand(len(lengths_aureg), max(lengths_aureg)) < lengths_aureg.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
+                # mask = mask.to(labels.device).unsqueeze(2).expand(-1, -1, hidden_dim)  # Mở rộng theo feature
+
+                
+                # print('LOSS 1: ')
+                # print(f'        lengths_teafo: {lengths_teafo}')
+                # print(f'        output_teafo_pad shape: {output_teafo_pad.shape}')
+                loss_1 = self.criterion(output_teafo_pad, labels_teafo_pad).sum(dim=-1)  # Shape: (batch_size, max_seq_len_out)
+
+
+                # print('LOSS 2: ')
+                # print(f'        lengths_aureg: {lengths_aureg}')
+                # print(f'        out_aureg_pad shape: {out_aureg_pad.shape}')
+                loss_2 = self.criterion(out_aureg_pad, labels_aureg_pad).sum(dim=-1)
+
+                # change device of mask
+                mask_teafo = mask_teafo.to(loss_1.device)
+                loss_1_mask = loss_1 * mask_teafo  # Masked loss
+                loss_1_mean = loss_1_mask.sum() / mask_teafo.sum()
+
+                mask_aureg = mask_aureg.to(loss_2.device)
+                loss_2_mask = loss_2 * mask_aureg
+                loss_2_mean = loss_2_mask.sum() / mask_aureg.sum()
+
+                loss_mean = loss_1_mean + loss_2_mean
+
+                # Backward pass
+                self.optimizer.zero_grad()
+                loss_mean.backward()
+                self.optimizer.step()
+
+                loss_epoch_log += loss_mean.item()
+
+                # print loss
+            self.util_printer.print_green(f"\nEpoch {epoch+1}, loss: {loss_epoch_log:.4f}")
+
+def main():
+    device = torch.device('cuda')
+    # 1. Dataset and DataLoader
+    dataset = TimeSeriesDataset(num_samples=100, max_len=15)
+
+    # 2. Initialize model, loss, optimizer
+    model = NAEDynamicLSTM(input_size=32, hidden_size=32, num_layers_lstm=2, lr=0.001, device=device)
+
+    # 3. Training loop
+    num_epochs = 10
+    model.train(num_epochs, dataset)
+
+if __name__ == '__main__':
+    main()
