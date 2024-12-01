@@ -7,21 +7,42 @@ import random
 
 from python_utils.python_utils.printer import Printer
 
-DEVICE = torch.device('cuda')
-
 class TimeSeriesDataset(Dataset):
-    def __init__(self, num_samples=100, max_len=10, hidden_dim=32):
+    def __init__(self, num_samples=100, max_len=10, feature_size=32):
         self.data = []
         for _ in range(num_samples):
-            seq_len_in = random.randint(3, max_len)
-            seq_len_out = random.randint(1, max_len)
+            seq_len = random.randint(3, max_len)
+            seq_len_in = random.randint(1, seq_len-1)
 
-            # print('check seq_len_in, seq_len_out shape: ', seq_len_in, seq_len_out)
-            # input()
-            input_seq = torch.rand(seq_len_in, hidden_dim)  # 1 feature per timestep
-            label_teafo_seq = input_seq.clone()
-            label_aureg_seq = torch.rand(seq_len_out, hidden_dim)  # Output sequence
-            self.data.append((input_seq, label_teafo_seq, label_aureg_seq))
+            seq = torch.rand(seq_len, feature_size)  # 1 feature per timestep
+            input_seq = seq[:seq_len_in]
+            label_teafo_seq = seq[1:seq_len_in+1]
+            label_aureg_seq = seq[seq_len_in+1 : ]
+            label_reconstruction_seq = seq[:seq_len_in]
+
+            self.data.append((input_seq, label_teafo_seq, label_aureg_seq, label_reconstruction_seq))
+
+        
+        len_list_input_check = [len(seq[0]) for seq in self.data]
+        len_list_label_teafo_check = [len(seq[1]) for seq in self.data]
+        len_list_label_aureg_check = [len(seq[2]) for seq in self.data]
+        len_list_label_reconstruction_check = [len(seq[3]) for seq in self.data]
+        
+        # check if all elements in a list are different from 0
+        # assert all(len_list_input), 'Zero length in input sequence'
+        # assert all(len_list_label_teafo), 'Zero length in label_teafo sequence'
+        # assert all(len_list_label_aureg), 'Zero length in label_aureg sequence'
+        # assert all(len_list_label_reconstruction), 'Zero length in label_reconstruction sequence'
+
+        count = 0
+        for l1, l2, l3, l4 in zip(len_list_input_check, len_list_label_teafo_check, len_list_label_aureg_check, len_list_label_reconstruction_check):
+            # assert l1 != 0 and l2 != 0 and l3 != 0 and l4 != 0, f'Zero length in sequence {l1}, {l2}, {l3}, {l4}'
+            if l1 == 0 or l2 == 0 or l3 == 0 or l4 == 0:
+                count += 1
+            print(l1, l2, l3, l4)
+            
+        input(f'Zero length in sequence: {count}/{num_samples}')
+        
         
     def __len__(self):
         return len(self.data)
@@ -66,56 +87,56 @@ class VLSLSTM(nn.Module):
 
         hi = torch.zeros(self.num_layers, this_batch_size, self.hidden_size).to(x.device)
         ci = torch.zeros(self.num_layers, this_batch_size, self.hidden_size).to(x.device)
-        output_teafo_unpad = [] # teacher forcing output sequences
+        outputs_teafo_unpad = [] # teacher forcing output sequences
 
         #----- teacher forcing -----
-        output, (hi, ci) = self.lstm(packed_x, (hi, ci))
+        outputs, (hi, ci) = self.lstm(packed_x, (hi, ci))
 
         # unpack and only keep real steps, not the padding based on lengths_teacher_forcing
-        # Unpack dữ liệu packed output
-        output_teafo_pad, len_real_teafo = pad_packed_sequence(output, batch_first=True)
+        # Unpack dữ liệu packed outputs
+        outputs_teafo_pad, len_real_teafo = pad_packed_sequence(outputs, batch_first=True)
         # print('lengths_teacher_forcing: ', lengths_teacher_forcing)
         # print('len_real_teafo: ', len_real_teafo)
 
 
         # Slicing để lấy từng chuỗi theo độ dài thực
-        batch_indices = torch.arange(output_teafo_pad.size(0))  # [0, 1, 2]
-        output_teafo_unpad = [output_teafo_pad[i, :len_real_teafo[i], :] for i in batch_indices]
+        batch_indices = torch.arange(outputs_teafo_pad.size(0))  # [0, 1, 2]
+        outputs_teafo_unpad = [outputs_teafo_pad[i, :len_real_teafo[i], :] for i in batch_indices]
 
         
         #----- autoregressive -----
         # 1. Lấy output cuối cùng của teacher forcing
-        input_aureg_init = [out[-1] for out in output_teafo_unpad]
+        input_aureg_init = [out[-1] for out in outputs_teafo_unpad]
         input_aureg_init = torch.stack(input_aureg_init, dim=0).unsqueeze(1)  # (batch_size, 1, hidden_size)
         # print('check input_aureg_init shape: ', input_aureg_init.shape)
         # print('check hi shape: ', hi.shape)
         # print('check ci shape: ', ci.shape)
         # input()
 
-        out_aureg_unpad = self.auto_regressive_loop(input_aureg_init, hi, ci, lengths_autoregressive)
+        outputs_aureg_unpad = self.auto_regressive_loop(input_aureg_init, hi, ci, lengths_autoregressive)
         # Nối 2 chuỗi output lại với nhau (dim=1 là chiều thời gian)
 
-        # print('out_aureg_unpad length: ', len(out_aureg_unpad))
+        # print('outputs_aureg_unpad length: ', len(outputs_aureg_unpad))
         # print('lengths_teacher_forcing: ', lengths_teacher_forcing)
         # print('lengths_autoregressive: ', lengths_autoregressive)
-        # for seq in out_aureg_unpad:
+        # for seq in outputs_aureg_unpad:
         #     print('     seq shape: ', seq.shape)
 
-        # out_seq = self.concat_output_seq(output_teafo_unpad, out_aureg_unpad)
+        # out_seq = self.concat_output_seq(outputs_teafo_unpad, outputs_aureg_unpad)
 
-        # padding out_aureg_unpad
-        out_aureg_pad = pad_sequence(out_aureg_unpad, batch_first=True) 
+        # padding outputs_aureg_unpad
+        outputs_aureg_pad = pad_sequence(outputs_aureg_unpad, batch_first=True) 
         # print('check output_teafo_pad shape: ', output_teafo_pad.shape)
-        # print('check out_aureg_pad shape: ', out_aureg_pad.shape)
+        # print('check outputs_aureg_pad shape: ', outputs_aureg_pad.shape)
         # input()
-        return output_teafo_pad, out_aureg_pad
+        return outputs_teafo_pad, outputs_aureg_pad
     
-    def concat_output_seq(self, output_teafo_unpad, out_seq_aureg):
+    def concat_output_seq(self, outputs_teafo_unpad, out_seq_aureg):
         # Nối 2 chuỗi output lại với nhau (dim=1 là chiều thời gian)
         out_seqs = []
-        print('check output_teafo_unpad shape: ', len(output_teafo_unpad))
+        print('check outputs_teafo_unpad shape: ', len(outputs_teafo_unpad))
         print('check out_seq_aureg shape: ', len(out_seq_aureg))
-        for seq_teafo, seq_aureg in zip(output_teafo_unpad, out_seq_aureg):
+        for seq_teafo, seq_aureg in zip(outputs_teafo_unpad, out_seq_aureg):
             # extend the teacher forcing sequence with the autoregressive sequence (tensors)
             # seq_teafo = torch.cat([seq_teafo, seq_aureg], dim=1)
             print('check seq_teafo shape: ', seq_teafo.shape)
@@ -202,7 +223,7 @@ class NAEDynamicLSTM():
         self.device = device
         
         self.encoder = Encoder(input_size, hidden_size).to(device)
-        self.vls_lstm = VLSLSTM(input_size, hidden_size, num_layers_lstm).to(device)
+        self.vls_lstm = VLSLSTM(hidden_size, hidden_size, num_layers_lstm).to(device)
         self.decoder = Decoder(hidden_size, input_size).to(device)
 
         # # Initialize model, loss, optimizer
@@ -213,26 +234,30 @@ class NAEDynamicLSTM():
 
 
     def collate_pad_fn(self, batch):
-        inputs, labels_teafo, labels_aureg = zip(*batch)
-        # labels_teafo = [label[:len(input)] for input, label in zip(inputs, labels)]
-        # labels_aureg = [label[len(input):] for input, label in zip(inputs, labels)]
+        inputs, labels_teafo, labels_aureg, label_reconstruction = zip(*batch)
 
         lengths_in = [len(seq) for seq in inputs]
         lengths_teafo = [len(seq) for seq in labels_teafo]
-
-        for lin, lte in zip(lengths_in, lengths_teafo):
-            if lin != lte:
-                print('check lengths_in, lengths_teafo: ', lin, lte)
-                return
         lengths_aureg = [len(seq) for seq in labels_aureg]
+        lengths_reconstruction = [len(seq) for seq in label_reconstruction]
+
+        # Check if data is proper
+        for lin, lte, lre in zip(lengths_in, lengths_teafo, lengths_reconstruction):
+            # check if lin, lte, lre are the same length
+            assert lin == lte == lre, f'Lengths are not the same: {lin}, {lte}, {lre}'
+        
         
         # Padding sequences to have same length in batch
         inputs_pad = pad_sequence(inputs, batch_first=True)  # Shape: (batch_size, max_seq_len_in, 1)
         # labels_pad = pad_sequence(labels, batch_first=True)  # Shape: (batch_size, max_seq_len_out, 1)
         labels_teafo_pad = pad_sequence(labels_teafo, batch_first=True)
         labels_aureg_pad = pad_sequence(labels_aureg, batch_first=True)
+        labels_reconstruction_pad = pad_sequence(label_reconstruction, batch_first=True)
         
-        return inputs_pad, labels_teafo_pad, labels_aureg_pad, lengths_teafo, lengths_aureg
+        return inputs_pad, \
+            (labels_teafo_pad, lengths_teafo), \
+            (labels_aureg_pad, lengths_aureg), \
+            (labels_reconstruction_pad, lengths_reconstruction)
 
     def train(self, num_epochs, dataset):
         self.encoder.train()
@@ -243,49 +268,76 @@ class NAEDynamicLSTM():
         for epoch in range(num_epochs):
             loss_epoch_log = 0
             for batch in dataloader:
-                # print('-----')
-                inputs, labels_teafo_pad, labels_aureg_pad, lengths_teafo, lengths_aureg = batch
-                inputs = inputs.to(DEVICE)
-                labels_teafo_pad = labels_teafo_pad.to(DEVICE)
-                labels_aureg_pad = labels_aureg_pad.to(DEVICE)
-                lengths_teafo, lengths_aureg = torch.tensor(lengths_teafo, dtype=torch.int64), torch.tensor(lengths_aureg, dtype=torch.int64)
+                print('-----')
 
-                output_teafo_pad, out_aureg_pad = self.vls_lstm(inputs.float(), lengths_teafo, lengths_aureg)
+                inputs, \
+                (labels_teafo_pad, lengths_teafo), \
+                (labels_aureg_pad, lengths_aureg), \
+                (labels_reconstruction_pad, lengths_reconstruction) = batch
 
+                print(lengths_teafo, ' ', lengths_aureg, ' ', lengths_reconstruction)
+                inputs = inputs.to(self.device)
+                labels_teafo_pad = labels_teafo_pad.to(self.device)
+                labels_aureg_pad = labels_aureg_pad.to(self.device)
+                labels_reconstruction_pad= labels_reconstruction_pad.to(self.device)
+
+                lengths_teafo= torch.tensor(lengths_teafo, dtype=torch.int64)
+                lengths_aureg= torch.tensor(lengths_aureg, dtype=torch.int64)
+                lengths_reconstruction= torch.tensor(lengths_reconstruction, dtype=torch.int64)
+
+                inputs_lstm = self.encoder(inputs.float())
+                outputs_teafo_pad, output_aureg_pad = self.vls_lstm(inputs_lstm, lengths_teafo, lengths_aureg)
+
+                output_teafo_pad_de = self.decoder(outputs_teafo_pad)
+                output_aureg_pad_de = self.decoder(output_aureg_pad)
 
 
                 # Tạo mask dựa trên chiều dài thực
-                mask_teafo = torch.arange(max(lengths_teafo)).expand(len(lengths_teafo), max(lengths_teafo)) < lengths_teafo.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
-                mask_aureg = torch.arange(max(lengths_aureg)).expand(len(lengths_aureg), max(lengths_aureg)) < lengths_aureg.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
                 # mask = mask.to(labels.device).unsqueeze(2).expand(-1, -1, hidden_dim)  # Mở rộng theo feature
 
                 
                 # print('LOSS 1: ')
                 # print(f'        lengths_teafo: {lengths_teafo}')
-                # print(f'        output_teafo_pad shape: {output_teafo_pad.shape}')
-                loss_1 = self.criterion(output_teafo_pad, labels_teafo_pad).sum(dim=-1)  # Shape: (batch_size, max_seq_len_out)
-
+                # print(f'        outputs_teafo_pad shape: {outputs_teafo_pad.shape}')
+                loss_1 = self.criterion(output_teafo_pad_de, labels_teafo_pad).sum(dim=-1)  # Shape: (batch_size, max_seq_len_out)
+                # Tạo mask dựa trên chiều dài thực
+                mask_teafo = torch.arange(max(lengths_teafo)).expand(len(lengths_teafo), max(lengths_teafo)) < lengths_teafo.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
+                mask_teafo = mask_teafo.to(loss_1.device)
+                loss_1_mask = loss_1 * mask_teafo  # Masked loss
+                loss_1_mean = 0
+                if mask_teafo.sum() != 0:
+                    loss_1_mean = loss_1_mask.sum() / mask_teafo.sum()
 
                 # print('LOSS 2: ')
                 # print(f'        lengths_aureg: {lengths_aureg}')
                 # print(f'        out_aureg_pad shape: {out_aureg_pad.shape}')
-                loss_2 = self.criterion(out_aureg_pad, labels_aureg_pad).sum(dim=-1)
-
-                # change device of mask
-                mask_teafo = mask_teafo.to(loss_1.device)
-                loss_1_mask = loss_1 * mask_teafo  # Masked loss
-                loss_1_mean = loss_1_mask.sum() / mask_teafo.sum()
-
+                loss_2 = self.criterion(output_aureg_pad_de, labels_aureg_pad).sum(dim=-1)
+                mask_aureg = torch.arange(max(lengths_aureg)).expand(len(lengths_aureg), max(lengths_aureg)) < lengths_aureg.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
                 mask_aureg = mask_aureg.to(loss_2.device)
                 loss_2_mask = loss_2 * mask_aureg
-                loss_2_mean = loss_2_mask.sum() / mask_aureg.sum()
+                loss_2_mean = 0
+                if mask_aureg.sum() != 0:
+                    loss_2_mean = loss_2_mask.sum() / mask_aureg.sum()
 
-                loss_mean = loss_1_mean + loss_2_mean
+                loss_3 = self.criterion(self.decoder(inputs_lstm), labels_reconstruction_pad).sum(dim=-1)
+                mask_reconstruction = torch.arange(max(lengths_reconstruction)).expand(len(lengths_reconstruction), max(lengths_reconstruction)) < lengths_reconstruction.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
+                mask_reconstruction = mask_reconstruction.to(loss_3.device)
+                loss_3_mask = loss_3 * mask_reconstruction
+                loss_3_mean = 0
+                if mask_reconstruction.sum() != 0:
+                    loss_3_mean = loss_3_mask.sum() / mask_reconstruction.sum()
+
+                loss_mean = loss_1_mean + loss_2_mean + loss_3_mean
 
                 # Backward pass
                 self.optimizer.zero_grad()
                 loss_mean.backward()
                 self.optimizer.step()
+
+                print(loss_mean.item())
+                if torch.isnan(loss_mean):
+                    self.util_printer.print_red("Loss contains NaN!", background=True)
+                    input()
 
                 loss_epoch_log += loss_mean.item()
 
@@ -294,11 +346,13 @@ class NAEDynamicLSTM():
 
 def main():
     device = torch.device('cuda')
+
+    feature_size = 9
     # 1. Dataset and DataLoader
-    dataset = TimeSeriesDataset(num_samples=100, max_len=15)
+    dataset = TimeSeriesDataset(num_samples=100, max_len=15, feature_size=feature_size)
 
     # 2. Initialize model, loss, optimizer
-    model = NAEDynamicLSTM(input_size=32, hidden_size=32, num_layers_lstm=2, lr=0.001, device=device)
+    model = NAEDynamicLSTM(input_size=9, hidden_size=32, num_layers_lstm=2, lr=0.001, device=device)
 
     # 3. Training loop
     num_epochs = 10
