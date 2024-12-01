@@ -22,28 +22,6 @@ class TimeSeriesDataset(Dataset):
 
             self.data.append((input_seq, label_teafo_seq, label_aureg_seq, label_reconstruction_seq))
 
-        
-        len_list_input_check = [len(seq[0]) for seq in self.data]
-        len_list_label_teafo_check = [len(seq[1]) for seq in self.data]
-        len_list_label_aureg_check = [len(seq[2]) for seq in self.data]
-        len_list_label_reconstruction_check = [len(seq[3]) for seq in self.data]
-        
-        # check if all elements in a list are different from 0
-        # assert all(len_list_input), 'Zero length in input sequence'
-        # assert all(len_list_label_teafo), 'Zero length in label_teafo sequence'
-        # assert all(len_list_label_aureg), 'Zero length in label_aureg sequence'
-        # assert all(len_list_label_reconstruction), 'Zero length in label_reconstruction sequence'
-
-        count = 0
-        for l1, l2, l3, l4 in zip(len_list_input_check, len_list_label_teafo_check, len_list_label_aureg_check, len_list_label_reconstruction_check):
-            # assert l1 != 0 and l2 != 0 and l3 != 0 and l4 != 0, f'Zero length in sequence {l1}, {l2}, {l3}, {l4}'
-            if l1 == 0 or l2 == 0 or l3 == 0 or l4 == 0:
-                count += 1
-            print(l1, l2, l3, l4)
-            
-        input(f'Zero length in sequence: {count}/{num_samples}')
-        
-        
     def __len__(self):
         return len(self.data)
     
@@ -166,9 +144,6 @@ class VLSLSTM(nn.Module):
         # Tạo mask cho từng bước
         mask = torch.arange(max_len).unsqueeze(0).to(lengths.device) < lengths.unsqueeze(1)
 
-        # # Danh sách lưu trữ các bước output
-        # output_seq = []
-        # Danh sách lưu trữ các bước output
         output_seq = torch.zeros(batch_size, max_len, hidden_size).to(input_aureg_init[0].device)
 
 
@@ -196,11 +171,6 @@ class VLSLSTM(nn.Module):
             # Lưu output vào tensor output_seq
             temp_output = torch.zeros(batch_size, 1, hidden_size).to(output.device)
 
-            # print('check temp_output shape: ', temp_output.shape)
-            # print('check current_mask shape: ', current_mask.shape)
-            # print('check lstm_input shape: ', lstm_input.shape)
-            # print('check output shape: ', output.shape)
-            # input()
             temp_output[current_mask] = output  # Ghi output của các chuỗi thực
 
             # Cập nhật đầu vào cho bước tiếp theo
@@ -268,14 +238,12 @@ class NAEDynamicLSTM():
         for epoch in range(num_epochs):
             loss_epoch_log = 0
             for batch in dataloader:
-                print('-----')
 
                 inputs, \
                 (labels_teafo_pad, lengths_teafo), \
                 (labels_aureg_pad, lengths_aureg), \
                 (labels_reconstruction_pad, lengths_reconstruction) = batch
 
-                print(lengths_teafo, ' ', lengths_aureg, ' ', lengths_reconstruction)
                 inputs = inputs.to(self.device)
                 labels_teafo_pad = labels_teafo_pad.to(self.device)
                 labels_aureg_pad = labels_aureg_pad.to(self.device)
@@ -334,7 +302,6 @@ class NAEDynamicLSTM():
                 loss_mean.backward()
                 self.optimizer.step()
 
-                print(loss_mean.item())
                 if torch.isnan(loss_mean):
                     self.util_printer.print_red("Loss contains NaN!", background=True)
                     input()
