@@ -4,10 +4,14 @@ import torch
 import matplotlib.pyplot as plt
 from .submodules.plotter import RoCatDataPlotter
 from torch.utils.data import DataLoader, TensorDataset
+from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
 
 class NAE_Utils:
     def __init__(self):
         self.plotter = RoCatDataPlotter()
+    
+    def count_parameters(self, model):
+        return sum(p.numel() for p in model.parameters() if p.requires_grad)
         
     def generate_one_parabol(self, min_vel, max_vel, min_theta, max_theta, min_phi, max_phi, delta_t, time_steps, g=9.81):
         v0 = np.random.uniform(min_vel, max_vel)
@@ -42,13 +46,13 @@ class NAE_Utils:
                     return os.path.join(root, file)
         return None
 
-    def save_model_info(self, data_dir, model_dir, data_num, num_epochs, batch_size, seq_length, prediction_steps, start_t, training_t, wandb_run_url,loss_all_data, loss_graph_image_path):        
+    def save_model_info(self, data_dir, model_dir, data_num, num_epochs, batch_size, start_t, training_t, wandb_run_url, loss_all_data):        
         readme_file = os.path.join(model_dir, 'README.md')
         final_loss = loss_all_data[-1][-1]  # Final total loss
         
         with open(readme_file, 'w') as f:
             f.write("# Model Information\n")
-
+            f.write("# NAE DYNAMIC\n")
             f.write("\n## Params\n")
             f.write("| Parameter                | Value |\n")
             f.write("|--------------------------|-------|\n")
@@ -59,8 +63,6 @@ class NAE_Utils:
             f.write(f"| **Training data size**   | {data_num} |\n")
             f.write(f"| **Number of Epochs**     | {num_epochs} |\n")
             f.write(f"| **Batch Size**           | {batch_size} |\n")
-            f.write(f"| **Sequence Length**      | {seq_length} |\n")
-            f.write(f"| **Prediction Steps**     | {prediction_steps} |\n")
             f.write(f"| **Final Loss**           | {final_loss:.9f} |\n")
             f.write(f"| **Wandb Run URL**        | {wandb_run_url} |\n")
 
@@ -68,18 +70,15 @@ class NAE_Utils:
             f.write("| Epoch | Loss1 | Loss2 | Loss3 | Total Loss |\n")
             f.write("|-------|-------|-------|-------|------------|\n")
             loss1 = loss_all_data[0][0]
-            loss2 = loss_all_data[1][0]
-            loss3 = loss_all_data[2][0]
-            total_loss = loss_all_data[3][0]
+            loss2 = loss_all_data[0][1]
+            loss3 = loss_all_data[0][2]
+            total_loss = loss_all_data[0][3]
             f.write(f"| {0} | {loss1:.9f} | {loss2:.9f} | {loss3:.9f} | {total_loss:.9f} |\n")
-            loss1 = loss_all_data[0][-1]
-            loss2 = loss_all_data[1][-1]
-            loss3 = loss_all_data[2][-1]
-            total_loss = loss_all_data[3][-1]
-            f.write(f"| {len(loss_all_data[0])-1} | {loss1:.9f} | {loss2:.9f} | {loss3:.9f} | {total_loss:.9f} |\n")
-            f.write("\n## Training Loss Graph\n")
-            relative_image_path = os.path.relpath(loss_graph_image_path, model_dir)
-            f.write(f"![Training Loss]({relative_image_path})\n")
+            loss1 = loss_all_data[-1][0]
+            loss2 = loss_all_data[-1][1]
+            loss3 = loss_all_data[-1][2]
+            total_loss = loss_all_data[-1][3]
+            f.write(f"| {len(loss_all_data)} | {loss1:.9f} | {loss2:.9f} | {loss3:.9f} | {total_loss:.9f} |\n")
     
     def save_loss(self, loss_all_data, model_dir):
         fig, ax = plt.subplots()
@@ -110,64 +109,133 @@ class NAE_Utils:
         return loss_graph_path
     
 
-    def score_all_predictions(self, predictions, labels, future_pred_steps, capture_thres=0.1):
-        # Tính toán MSE cho tất cả các phần tử
-        mse_all = np.mean((predictions - labels) ** 2, axis=(1, 2))
+    def score_all_predictions(self, output_teafo_pad_de, labels_teafo_pad, lengths_teafo, 
+                                    output_aureg_pad_de, labels_aureg_pad, lengths_aureg,
+                                    capture_thres=0.1):
+
+        # mask_reconstruction = torch.arange(max(lengths_reconstruction)).expand(len(lengths_reconstruction), max(lengths_reconstruction)) < lengths_reconstruction.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
+        # mask_reconstruction = mask_reconstruction.to(loss_3.device)
         
-        # Tính toán MSE cho các thành phần x, y, z
-        mse_xyz = np.mean((predictions[:, :, :3] - labels[:, :, :3]) ** 2, axis=(1, 2))
+        # calculate mask based on lengths_teafo and lengths_aureg
+        mask_teafo = torch.arange(max(lengths_teafo)).expand(len(lengths_teafo), max(lengths_teafo)) < lengths_teafo.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
+        mask_teafo = mask_teafo.to(output_teafo_pad_de.device)
+        mask_aureg = torch.arange(max(lengths_aureg)).expand(len(lengths_aureg), max(lengths_aureg)) < lengths_aureg.unsqueeze(1)
+        mask_aureg = mask_aureg.to(output_aureg_pad_de.device)
+        mask_combined = torch.cat([mask_teafo, mask_aureg], dim=1)
+
+        output_combined = torch.cat([output_teafo_pad_de, output_aureg_pad_de], dim=1)
+        labels_combined = torch.cat([labels_teafo_pad, labels_aureg_pad], dim = 1)
         
-        # Tính toán Average Displacement Error (ADE)
-        displacement_err_list = np.linalg.norm(predictions[:, :, :3] - labels[:, :, :3], axis=2)
-        ade = np.mean(displacement_err_list, axis=1)
+        # # Tính toán MSE cho tất cả các phần tử
+        # mse_all = np.mean((predictions - labels) ** 2, axis=(1, 2))
         
-        # Tính toán Norm Average Displacement Error (NADE)
-        # sub_length = np.linalg.norm(one_label[1:] - one_label[:-1], axis=1)
-        # total_length = np.sum(sub_length)
-        # nade = ade/total_length
-
-        sub_length = np.linalg.norm(labels[:, 1:, :3] - labels[:, :-1, :3], axis=2)
-        # sub_length = np.linalg.norm(labels[:, 1:] - labels[:, :-1], axis=2)
-        total_length = np.sum(sub_length, axis=1)
-        nade = ade / total_length
-
+        # # Tính toán MSE cho các thành phần x, y, z
+        # mse_xyz = np.mean((predictions[:, :, :3] - labels[:, :, :3]) ** 2, axis=(1, 2))
         
-        # NADE for future prediction
-        displacement_err_list_future = np.linalg.norm(predictions[:, -future_pred_steps:, :3] - labels[:, -future_pred_steps:, :3], axis=2)
-        ade_future = np.mean(displacement_err_list_future, axis=1)
-        total_length_future = np.sum(sub_length[:, -future_pred_steps:], axis=1)
-        nade_future = ade_future / total_length_future
         
-        # Tính toán khoảng cách cuối cùng
-        final_step_err = displacement_err_list[:, -1]
+        ## =================== ADE Calculation ===================
+        # Tính toán Average Displacement Error (ADE) cho tất cả các phần tử, kết hợp với mask
 
+        #       This is for entire prediction
+        ade_entire = self.ade_masked_calculation(output_combined, labels_combined, mask_combined)
+        #       This is for future prediction
+        ade_future = self.ade_masked_calculation(output_aureg_pad_de, labels_aureg_pad, mask_aureg)
+        
+        ## =================== NADE Calculation ===================
+        ## (Norm Average Displacement Error)
+        #       This is for entire prediction 
 
+        nade_entire = self.nade_masked_calculation(ade_entire, labels_combined, mask_combined)
+        #       This is for future prediction
+        nade_future = self.nade_masked_calculation(ade_future, labels_aureg_pad, mask_aureg)
+        
+        ## =================== Final point Calculation ===================
+        #       Calculate final step error
+        #       Find the final valid step of each trajectory in batch based on mask
+        final_step_err = self.final_step_prediction_error(output_combined, labels_combined, mask_combined)
 
-
+        ## =================== Synthesis all results ===================
         # Calculate mean values of all predictions
-        mean_mse_all = np.mean(mse_all)
-        mean_mse_xyz = np.mean(mse_xyz)
-        mean_ade = np.mean(ade)
+        # mean_mse_all = np.mean(mse_all)
+        # mean_mse_xyz = np.mean(mse_xyz)
+        mean_ade_entire = np.mean(ade_entire.cpu().numpy())
+        var_ade_entire = np.var(ade_entire.cpu().numpy())
 
-        mean_nade = np.mean(nade)
-        # Tính phương sai (Variance)
-        var_nade = np.var(nade)
+        mean_ade_future = np.mean(ade_future.cpu().numpy())
+        var_ade_future = np.var(ade_future.cpu().numpy())
 
-        mean_final_step_err = np.mean(final_step_err)
-        # Tính phương sai (Variance)
-        var_fe = np.var(final_step_err)
+        mean_nade_entire = np.mean(nade_entire.cpu().numpy())
+        var_nade_entire = np.var(nade_entire.cpu().numpy())
 
-        mean_nade_future = np.mean(nade_future)
+        mean_nade_future = np.mean(nade_future.cpu().numpy())
+        var_nade_future = np.var(nade_future.cpu().numpy())
+
+        mean_final_step_err = np.mean(final_step_err.cpu().numpy())
+        var_fe = np.var(final_step_err.cpu().numpy())
+
 
         # Calculate capture success rate
-        count_less_than_threshold = np.sum(final_step_err <= capture_thres)
-        capture_success_rate = (count_less_than_threshold / final_step_err.size) * 100
-        # input('\nTODO: check final_step_err.size and capture_success_rate size')
-        # print('final_step_err: ', final_step_err)
-        # print(f'final_step_err.size: {final_step_err.size}, capture_success_rate: {capture_success_rate}')
+        success_rate_matrix = (final_step_err <= capture_thres).cpu().numpy()
+        mean_capture_success_rate = np.mean(success_rate_matrix)
+        var_capture_success_rate = np.var(success_rate_matrix)
+
         
-        return mean_mse_all, mean_mse_xyz, mean_ade, (mean_nade,var_nade), (mean_final_step_err, var_fe), mean_nade_future, capture_success_rate
+        return  (mean_ade_entire, var_ade_entire), \
+                (mean_ade_future, var_ade_future), \
+                (mean_nade_entire, var_nade_entire), \
+                (mean_nade_future, var_nade_future), \
+                (mean_final_step_err, var_fe), \
+                (mean_capture_success_rate, var_capture_success_rate)
     
+    
+    def ade_masked_calculation(self, predictions, labels, mask_matrix):
+        displacement_err_list = torch.norm(predictions - labels, dim=2)*mask_matrix
+        ade = torch.sum(displacement_err_list, dim=1)
+        # calculate total valide data point of each row in mask_matrix
+        total_length = torch.sum(mask_matrix, dim=1)
+        ade = ade/total_length
+        ade = ade
+        return ade
+
+    def nade_masked_calculation(self, ade, labels, mask_matrix):
+        # Calculate accumulated displacement (step by step) for each trajectory in batch based on mask
+        sub_length = torch.norm(labels[:, 1:, :3] - labels[:, :-1, :3], dim=2)
+        mask_combined_valid = mask_matrix[:, 1:] * mask_matrix[:, :-1]
+        sub_length_valid = sub_length * mask_combined_valid
+        accumulated_length = torch.sum(sub_length_valid, dim=1)    
+        nade = ade / accumulated_length
+        # check if any row of mask_matrix is all False elements
+        matrix_check = torch.sum(mask_matrix, dim=1)
+        for m in matrix_check:
+            if m == 0:
+                print('Found a row with all False elements 1')
+                input()
+        
+        matrix_valid_check = torch.sum(mask_combined_valid, dim=1)
+        for i, m in enumerate(matrix_valid_check):
+            if m == 0:
+                print('Found a row with all False elements 2')
+                print(mask_matrix[i])
+                print(mask_matrix[i, 1:])
+                print(mask_matrix[i, :-1])
+                input()
+        
+        return nade
+    
+    def final_step_prediction_error(self, predictions, labels, mask_combined):
+        batch_size = mask_combined.size(0)
+        step_size = mask_combined.size(1)
+        # Tìm step cuối cùng
+        reverse_mask = torch.flip(mask_combined, dims=[1]).int()
+        last_valid_step = step_size - 1 - torch.argmax(reverse_mask, dim=1)
+        # 3. Tính L2 error
+        batch_indices = torch.arange(batch_size)
+        final_prediction = predictions[batch_indices, last_valid_step, :3]  # [batch_size, dim]
+        final_label = labels[batch_indices, last_valid_step, :3]  # [batch_size, dim]
+
+        l2_error = torch.norm(final_prediction - final_label, dim=1)  # [batch_size]
+        return l2_error
+
     def prepare_data_loaders(self, data_train, data_val, batch_size_train, batch_size_val):
         #   prepare training data
         x_train, y_train = data_train
