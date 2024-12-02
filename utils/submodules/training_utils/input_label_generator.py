@@ -1,5 +1,5 @@
 import numpy as np
-
+import torch
 class InputLabelGenerator:
     def __init__(self) -> None:
         pass
@@ -55,6 +55,28 @@ class InputLabelGenerator:
         if shuffle_data:
             np.random.shuffle(data_list)
         return data_list
+    
+    def generate_input_label_dynamic_seqs(self, data, step_start=None, step_end = None, increment=1, shuffle=False):
+        data_gen = []
+        if step_start is None or step_start < 1:
+            step_start = 1
+        if step_end is None or step_end > -2:
+            step_end = - 2
+        # self.data.append((input_seq, label_teafo_seq, label_aureg_seq, label_reconstruction_seq))
+        for seq in data:
+            for i in range(step_start, len(seq) + step_end, increment):
+                input_seq = torch.tensor(seq[:i], dtype=torch.float32) 
+                label_teafo_seq = torch.tensor(seq[1:i+1], dtype=torch.float32) 
+                label_aureg_seq = torch.tensor(seq[i+1:], dtype=torch.float32) 
+                label_reconstruction_seq = input_seq
+
+                data_gen.append((input_seq, label_teafo_seq, label_aureg_seq, label_reconstruction_seq))
+        if shuffle:
+            for _ in range(5):
+                np.random.shuffle(data_gen)
+        return data_gen
+            
+
 
 # Test the function
 def main():
