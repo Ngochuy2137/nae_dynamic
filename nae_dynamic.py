@@ -634,8 +634,6 @@ def main():
     # # 1. Dataset and DataLoader
     # dataset = TimeSeriesDataset(num_samples=100, max_len=15, feature_size=feature_size)
 
-
-    
     data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_prediction_ws/src/nae/data/rllab_dataset_no_orientation/data_enrichment/big_plane/big_plane_enrich_for_training'
     thrown_object = 'big_plane'
     checkout_path = None
@@ -646,7 +644,7 @@ def main():
     training_params = {
         'num_epochs': 5000,
         'batch_size_train': 128,    
-        'batch_size_val': 128,
+        'batch_size_val': 1024,
         'save_interval': 10,
         'thrown_object' : thrown_object + '-dynamic-len'
     }
