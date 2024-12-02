@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import os
 import fnmatch
 from datetime import datetime
-from python_utils.printer import Printer
+from python_utils.python_utils.printer import Printer
 
 class DataLoader:
     '''
