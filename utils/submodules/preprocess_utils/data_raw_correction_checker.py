@@ -12,7 +12,7 @@ import random
 from python_utils.printer import Printer
 DEBUG = False
 np.set_printoptions(suppress=True)
-from nae.utils.submodules.preprocess_utils.data_raw_reader import RoCatRLLabDataRawReader
+from utils.submodules.preprocess_utils.data_raw_reader import RoCatRLLabDataRawReader
 
 class RoCatRLDataRawCorrectionChecker:
     def __init__(self,):
@@ -70,7 +70,7 @@ class RoCatRLDataRawCorrectionChecker:
             self.util_printer.print_green(f'[VEL INTERPOLATION CHECK]   Trajectory {i} has correct data')
         
             
-    def check_feature_correction(self, one_trajectory, new_data_format=False):
+    def check_feature_correction(self, one_trajectory, data_whose_y_up=False):
         '''
         The old data format is:
             - Swap y, z
@@ -83,8 +83,8 @@ class RoCatRLDataRawCorrectionChecker:
                 + Swap vy, vz
             - Data point: x, y, z, vx, vy, vz, 0, -9.81, 0
         '''
-        for point in one_trajectory['points']:
-            if new_data_format:
+        for point in one_trajectory:
+            if data_whose_y_up:
                 is_feature_7_right = abs(point[7] + 9.81) < 1e-5
                 is_feature_8_right = abs(point[8]) < 1e-5
             else:
@@ -94,6 +94,7 @@ class RoCatRLDataRawCorrectionChecker:
                 msg = point
                 return False, msg
         return True, ''
+    
     def check_velocity_correction(self, one_trajectory):
         """
         Kiểm tra xem nội suy vận tốc có đúng không.
