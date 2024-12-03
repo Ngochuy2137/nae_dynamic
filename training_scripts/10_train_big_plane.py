@@ -1,6 +1,7 @@
 from nae.nae import *
 from nae.utils.submodules.training_utils.data_loader import DataLoader as NAEDataLoader
 from nae.utils.submodules.training_utils.input_label_generator import InputLabelGenerator
+from nae.utils.submodules.preprocess_utils.data_raw_correction_checker import RoCatRLDataRawCorrectionChecker
 import random
 DEVICE = torch.device("cuda")
 def main():
@@ -12,16 +13,7 @@ def main():
     random.seed(seed)
 
     thrown_object = 'big_plane'
-    # # get dir of this script
-    # data_folder = os.path.dirname(os.path.realpath(__file__))
-    # # cd ..
-    # data_folder = os.path.dirname(data_folder)
-    # # cd to data folder
-    # data_folder = os.path.join(data_folder, 'data')
-    # # data_subfolder = 'nae_paper_dataset/split/2024-09-27/' + thrown_object
-    # data_subfolder = thrown_object
-    # data_folder = os.path.join(data_folder, data_subfolder)
-    data_folder = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_prediction_ws/src/nae/data/new_dataset_no_orientation/big_plane/min_len_65/new_data_format/big_plane/split'
+    data_folder = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_prediction_ws/src/nae/data/rllab_dataset_no_orientation/data_enrichment/big_plane/big_plane_enrich_for_training'
 
     # Learning parameters
     input_lenth = 15
@@ -51,7 +43,18 @@ def main():
     nae_data_loader = NAEDataLoader()
     data_train, data_val, data_test = nae_data_loader.load_dataset(data_folder)
 
-    
+    # check data correction
+    data_collection_checker = RoCatRLDataRawCorrectionChecker()
+    print('Checking data correction ...')
+    for d_train, d_val, d_test in zip(data_train, data_val, data_test):
+        d_train_check = data_collection_checker.check_feature_correction(d_train, data_whose_y_up=True)
+        d_val_check = data_collection_checker.check_feature_correction(d_val, data_whose_y_up=True)
+        d_test_check = data_collection_checker.check_feature_correction(d_test, data_whose_y_up=True)
+        if not d_train_check or not d_val_check or not d_test_check:
+            print('Data is incorrect, please check')
+            return
+    print('     Data is correct\n')
+        
     print('     ----- Before generating inputs, labels -----')
     print('     Data dir:      ', data_folder)
     print('     Training data:      ', len(data_train))

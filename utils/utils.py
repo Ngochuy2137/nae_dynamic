@@ -46,7 +46,7 @@ class NAE_Utils:
                     return os.path.join(root, file)
         return None
 
-    def save_model_info(self, data_dir, model_dir, data_num, num_epochs, batch_size, start_t, training_t, wandb_run_url, loss_all_data):        
+    def save_model_info(self, data_dir, model_dir, data_num, num_epochs, batch_size, start_t, training_t, loss_all_data, wandb_run_url=''):        
         readme_file = os.path.join(model_dir, 'README.md')
         final_loss = loss_all_data[-1][-1]  # Final total loss
         

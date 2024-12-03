@@ -11,7 +11,7 @@ import os
 from datetime import datetime
 import wandb
 
-from nae_core.utils.utils import NAE_Utils
+from nae.utils.utils import NAE_Utils
 
 DEVICE = torch.device("cuda")
 
@@ -86,11 +86,6 @@ class NAE:
         self.decoder.to(self.device)
         self.criterion = nn.MSELoss()
         self.optimizer = optim.Adam(list(self.encoder.parameters()) + list(self.lstm.parameters()) + list(self.decoder.parameters()), lr=lr)
-
-        self.plot_data_loss1 = []
-        self.plot_data_loss2 = []
-        self.plot_data_loss3 = []
-        self.plot_data_loss_total = []
 
         print('\n-----------------------------------')
         print('Parameters number of encoder: ', count_parameters(self.encoder))
@@ -335,9 +330,9 @@ class NAE:
         }, checkpoint_path)
         
         
-        loss_graph_image_path = self.utils.save_loss(loss_all_data, model_dir)
+        # loss_graph_image_path = self.utils.save_loss(loss_all_data, model_dir)
         
-        self.utils.save_model_info(self.data_dir, model_dir, data_num, self.num_epochs, self.batch_size_train, self.t_value, self.k_value, start_t, training_t, self.wandb_run_url, loss_all_data, loss_graph_image_path)
+        self.utils.save_model_info(self.data_dir, model_dir, data_num, self.num_epochs, self.batch_size_train, self.t_value, self.k_value, start_t, training_t, self.wandb_run_url, loss_all_data, '')
         print(f'Models were saved to {model_dir}')
         return model_dir
    
@@ -459,28 +454,6 @@ class NAE:
         loss_total_val_log/=len(dl_val.dataset)
         return loss_total_val_log, mean_mse_all, mean_mse_xyz, mean_ade, mean_nade, mean_final_step_err, mean_nade_future, capture_success_rate
 
-
-    # def validate_and_score_online_prediction(self, dl_val):
-    #     '''
-    #     Simulate online prediction by feeding previous prediction and label data to the model
-    #     '''
-    #     self.lstm.eval()
-    #     self.encoder.eval()
-    #     self.decoder.eval()
-
-    #     auto_agressive_len = 5          # number of future prediction steps that are used as input for the next prediction step
-    #                                     # => Teacher Forcing steps = future_pred_len - auto_agressive_len
-
-    #     with torch.no_grad():
-    #         for batch_x_val, batch_y_val in dl_val:
-    #             # ----- 1. Setup input and labels -----
-    #             batch_x_val, batch_y_val = batch_x_val.to(self.device), batch_y_val.to(self.device)
-    #             inputs = batch_x_val
-    #             l1_label_val = batch_y_val[:, 1:self.t_value+1, :]      # t steps
-    #             l2_label_val = batch_y_val[:, self.t_value+1:, :]       # k-1 steps
-    #             l3_label_val = batch_y_val[:, :self.t_value, :]         # t steps
-    #             label_seq = batch_y_val[:, 1:, :]                       # t + k - 1 steps from 1 to t + k -1
-                
 
 def main():
     # Model parameters
