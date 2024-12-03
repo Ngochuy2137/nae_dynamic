@@ -11,7 +11,7 @@ from datetime import datetime
 import os
 import time
 
-from python_utils.python_utils.printer import Printer
+from python_utils.printer import Printer
 from utils.utils import NAE_Utils
 from utils.submodules.training_utils.data_loader import DataLoader as NAEDataLoader
 from utils.submodules.preprocess_utils.data_raw_correction_checker import RoCatRLDataRawCorrectionChecker
@@ -119,75 +119,99 @@ class VLSLSTM(nn.Module):
         # input()
         return outputs_teafo_pad, outputs_aureg_pad
     
-    # def concat_output_seq(self, outputs_teafo_unpad, out_seq_aureg):
-    #     # Nối 2 chuỗi output lại với nhau (dim=1 là chiều thời gian)
-    #     out_seqs = []
-    #     print('check outputs_teafo_unpad shape: ', len(outputs_teafo_unpad))
-    #     print('check out_seq_aureg shape: ', len(out_seq_aureg))
-    #     for seq_teafo, seq_aureg in zip(outputs_teafo_unpad, out_seq_aureg):
-    #         # extend the teacher forcing sequence with the autoregressive sequence (tensors)
-    #         # seq_teafo = torch.cat([seq_teafo, seq_aureg], dim=1)
-    #         print('check seq_teafo shape: ', seq_teafo.shape)
-    #         print('check seq_aureg shape: ', seq_aureg.shape)
-    #         # merge two sequences
-    #         seq_teafo = torch.cat([seq_teafo, seq_aureg], dim=0)
-    #         print('len seq_teafo: ', seq_teafo.shape)
-    #         input()
-    #         out_seqs.append(seq_teafo)
-    #     return out_seqs
+    # def auto_regressive_loop(self, input_aureg_init, hi, ci, lengths_aureg, mask_aureg):
+    #     """
+    #     Thực hiện dự đoán autoregressive.
         
+    #     Args:
+    #         batch_x_padded: Tensor đầu vào đã được padding, kích thước (batch_size, seq_len, feature_size).
+    #         lengths_aureg: Độ dài thực của từng chuỗi trong batch, kích thước (batch_size,).
+        
+    #     Returns:
+    #         output_seq: Tensor đầu ra của mô hình, kích thước (batch_size, seq_len, hidden_size).
+    #     """
+    #     batch_size = input_aureg_init.size(0)
+    #     max_len = lengths_aureg.max().item()
+    #     hidden_size = self.lstm.hidden_size
+
+    #     output_seq = torch.zeros(batch_size, max_len, hidden_size).to(input_aureg_init[0].device)
+
+
+    #     # Lấy bước đầu tiên làm đầu vào ban đầu
+    #     lstm_input = input_aureg_init  # Kích thước (batch_size, 1, feature_size)
+
+    #     # Duyệt qua từng bước thời gian
+    #     for t in range(max_len):
+    #         current_mask = mask_aureg[:, t]  # Mask tại bước thời gian t
+    #         if not current_mask.any():  # Nếu tất cả đều là padding, dừng lại
+    #             break
+
+    #         # Lọc các chuỗi thực tại bước thời gian hiện tại
+    #         lstm_input = lstm_input[current_mask]  # (num_real_sequences, 1, feature_size)
+    #         hi_current = hi[:, current_mask, :]  # (num_layers, num_real_sequences, hidden_size)
+    #         ci_current = ci[:, current_mask, :]  # (num_layers, num_real_sequences, hidden_size)
+
+    #         # Truyền qua LSTM
+    #         output, (hi_new, ci_new) = self.lstm(lstm_input, (hi_current, ci_current))
+
+    #         # Cập nhật trạng thái ẩn cho các chuỗi thực
+    #         hi[:, current_mask, :] = hi_new
+    #         ci[:, current_mask, :] = ci_new
+
+    #         # Lưu output vào tensor output_seq
+    #         temp_output = torch.zeros(batch_size, 1, hidden_size).to(output.device)
+
+    #         temp_output[current_mask] = output  # Ghi output của các chuỗi thực
+
+    #         # Cập nhật đầu vào cho bước tiếp theo
+    #         lstm_input = temp_output[:, -1:, :]  # Sử dụng output hiện tại làm input tiếp theo
+
+    #         # output_seq.append(temp_output[current_mask])  # Thêm vào danh sách output
+    #         output_seq[:, t:t+1, :] = temp_output
+        
+    #     # print('check output_seq shape: ', output_seq.shape)
+    #     # filter padding and save to a list
+    #     output_seq_final = [output_seq[i, :lengths_aureg[i], :] for i in range(batch_size)]
+
+    #     return output_seq_final
+
     def auto_regressive_loop(self, input_aureg_init, hi, ci, lengths_aureg, mask_aureg):
         """
         Thực hiện dự đoán autoregressive.
         
         Args:
-            batch_x_padded: Tensor đầu vào đã được padding, kích thước (batch_size, seq_len, feature_size).
+            input_aureg_init: Tensor đầu vào ban đầu, kích thước (batch_size, 1, hidden_size).
+            hi: Trạng thái ẩn ban đầu của LSTM, kích thước (num_layers, batch_size, hidden_size).
+            ci: Trạng thái ô nhớ ban đầu của LSTM, kích thước (num_layers, batch_size, hidden_size).
             lengths_aureg: Độ dài thực của từng chuỗi trong batch, kích thước (batch_size,).
+            mask_aureg: Mask để xác định các bước thời gian hợp lệ, kích thước (batch_size, max_seq_len).
         
         Returns:
-            output_seq: Tensor đầu ra của mô hình, kích thước (batch_size, seq_len, hidden_size).
+            output_seq: Tensor đầu ra của mô hình, kích thước (batch_size, max_seq_len, hidden_size).
         """
         batch_size = input_aureg_init.size(0)
         max_len = lengths_aureg.max().item()
         hidden_size = self.lstm.hidden_size
 
-        output_seq = torch.zeros(batch_size, max_len, hidden_size).to(input_aureg_init[0].device)
+        # Khởi tạo tensor lưu trữ toàn bộ output (bao gồm cả padding)
+        output_seq = torch.zeros(batch_size, max_len, hidden_size).to(input_aureg_init.device)
 
-
-        # Lấy bước đầu tiên làm đầu vào ban đầu
-        lstm_input = input_aureg_init  # Kích thước (batch_size, 1, feature_size)
+        # Đầu vào ban đầu
+        lstm_input = input_aureg_init  # Kích thước (batch_size, 1, hidden_size)
 
         # Duyệt qua từng bước thời gian
         for t in range(max_len):
-            current_mask = mask_aureg[:, t]  # Mask tại bước thời gian t
-            if not current_mask.any():  # Nếu tất cả đều là padding, dừng lại
-                break
+            # Truyền qua LSTM (toàn bộ batch, bao gồm cả padding)
+            output, (hi, ci) = self.lstm(lstm_input, (hi, ci))
 
-            # Lọc các chuỗi thực tại bước thời gian hiện tại
-            lstm_input = lstm_input[current_mask]  # (num_real_sequences, 1, feature_size)
-            hi_current = hi[:, current_mask, :]  # (num_layers, num_real_sequences, hidden_size)
-            ci_current = ci[:, current_mask, :]  # (num_layers, num_real_sequences, hidden_size)
-
-            # Truyền qua LSTM
-            output, (hi_new, ci_new) = self.lstm(lstm_input, (hi_current, ci_current))
-
-            # Cập nhật trạng thái ẩn cho các chuỗi thực
-            hi[:, current_mask, :] = hi_new
-            ci[:, current_mask, :] = ci_new
-
-            # Lưu output vào tensor output_seq
-            temp_output = torch.zeros(batch_size, 1, hidden_size).to(output.device)
-
-            temp_output[current_mask] = output  # Ghi output của các chuỗi thực
+            # Lưu output vào tensor (bao gồm cả padding)
+            output_seq[:, t:t+1, :] = output
 
             # Cập nhật đầu vào cho bước tiếp theo
-            lstm_input = temp_output[:, -1:, :]  # Sử dụng output hiện tại làm input tiếp theo
-
-            # output_seq.append(temp_output[current_mask])  # Thêm vào danh sách output
-            output_seq[:, t:t+1, :] = temp_output
+            # Chỉ giữ lại các giá trị từ bước thời gian t hợp lệ (theo mask)
+            lstm_input = output * mask_aureg[:, t].unsqueeze(1).unsqueeze(2)  # Mask tại bước t
         
-        # print('check output_seq shape: ', output_seq.shape)
-        # filter padding and save to a list
+        # Trích xuất các chuỗi hợp lệ dựa trên lengths_aureg (bỏ padding)
         output_seq_final = [output_seq[i, :lengths_aureg[i], :] for i in range(batch_size)]
 
         return output_seq_final
@@ -245,6 +269,12 @@ class NAEDynamicLSTM():
         lengths_aureg = [len(seq) for seq in labels_aureg]
         lengths_reconstruction = [len(seq) for seq in label_reconstruction]
 
+        # move to device
+        lengths_in = torch.tensor(lengths_in, dtype=torch.int64)
+        lengths_teafo= torch.tensor(lengths_teafo, dtype=torch.int64)
+        lengths_aureg= torch.tensor(lengths_aureg, dtype=torch.int64)
+        lengths_reconstruction= torch.tensor(lengths_reconstruction, dtype=torch.int64)
+
         # Padding sequences to have same length in batch
         inputs_pad = pad_sequence(inputs, batch_first=True)  # Shape: (batch_size, max_seq_len_in, feature_dim)
         labels_teafo_pad = pad_sequence(labels_teafo, batch_first=True)
@@ -252,7 +282,7 @@ class NAEDynamicLSTM():
         labels_reconstruction_pad = pad_sequence(label_reconstruction, batch_first=True)
 
         # Tạo mask dựa trên độ dài của chuỗi
-        mask_in = torch.arange(max(lengths_in)).expand(len(lengths_in), max(lengths_in)) < torch.tensor(lengths_in).unsqueeze(1) # shape: (batch_size, max_seq_len_in)
+        mask_in = torch.arange(max(lengths_in)).expand(len(lengths_in), max(lengths_in)) < lengths_in.unsqueeze(1) # shape: (batch_size, max_seq_len_in)
         mask_teafo = torch.arange(max(lengths_teafo)).expand(len(lengths_teafo), max(lengths_teafo)) < lengths_teafo.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
         mask_aureg = torch.arange(max(lengths_aureg)).expand(len(lengths_aureg), max(lengths_aureg)) < lengths_aureg.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
         mask_reconstruction = torch.arange(max(lengths_reconstruction)).expand(len(lengths_reconstruction), max(lengths_reconstruction)) < lengths_reconstruction.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
@@ -263,15 +293,15 @@ class NAEDynamicLSTM():
         # mask_reconstruction = torch.arange(max(lengths_reconstruction)).unsqueeze(0) < torch.tensor(lengths_reconstruction).unsqueeze(1)
 
         # move to device
+        # lengths_in = lengths_in.to(self.device)
+        # lengths_teafo = lengths_teafo.to(self.device)
+        # lengths_aureg = lengths_aureg.to(self.device)
+        # lengths_reconstruction = lengths_reconstruction.to(self.device)
+
         inputs_pad = inputs_pad.to(self.device).float()
         labels_teafo_pad = labels_teafo_pad.to(self.device)
         labels_aureg_pad = labels_aureg_pad.to(self.device)
         labels_reconstruction_pad= labels_reconstruction_pad.to(self.device)
-
-        lengths_in = torch.tensor(lengths_in, dtype=torch.int64)
-        lengths_teafo= torch.tensor(lengths_teafo, dtype=torch.int64)
-        lengths_aureg= torch.tensor(lengths_aureg, dtype=torch.int64)
-        lengths_reconstruction= torch.tensor(lengths_reconstruction, dtype=torch.int64)
 
         mask_in = mask_in.to(self.device)
         mask_teafo = mask_teafo.to(self.device)
@@ -288,7 +318,7 @@ class NAEDynamicLSTM():
     def train(self, data_train, data_val, checkpoint_path=None, enable_wandb=False):
         start_t = time.time()
 
-        dataloader_train = TorchDataLoader(data_train, batch_size=self.batch_size_train, collate_fn=lambda x: self.collate_pad_fn(x), shuffle=True, num_workers=4, pin_memory=True)
+        dataloader_train = TorchDataLoader(data_train, batch_size=self.batch_size_train, collate_fn=lambda x: self.collate_pad_fn(x), shuffle=True)
 
         for epoch in range(self.num_epochs):
             self.encoder.train()
@@ -479,7 +509,7 @@ class NAEDynamicLSTM():
         
         # loss_graph_image_path = self.utils.save_loss(loss_all_data, model_dir)
         
-        self.utils.save_model_info(self.data_dir, model_dir, data_num, self.num_epochs, self.batch_size_train, start_t, training_t, self.wandb_run_url, loss_all_data)
+        self.utils.save_model_info(self.data_dir, model_dir, data_num, self.num_epochs, self.batch_size_train, start_t, training_t, loss_all_data, self.wandb_run_url)
         print(f'Models were saved to {model_dir}')
         return model_dir
 
@@ -500,10 +530,10 @@ class NAEDynamicLSTM():
 
         with torch.no_grad():
             for batch in dl_val:
-                inputs_pad, \
-                (labels_teafo_pad, lengths_teafo), \
-                (labels_aureg_pad, lengths_aureg), \
-                (labels_reconstruction_pad, lengths_reconstruction) = batch
+                (inputs_pad, lengths_in, mask_in), \
+                (labels_teafo_pad, lengths_teafo, mask_teafo), \
+                (labels_aureg_pad, lengths_aureg, mask_aureg),\
+                (labels_reconstruction_pad, lengths_reconstruction, mask_reconstruction) = batch
 
                 inputs_pad = inputs_pad.to(self.device)
                 labels_teafo_pad = labels_teafo_pad.to(self.device)
@@ -515,7 +545,7 @@ class NAEDynamicLSTM():
                 lengths_reconstruction= torch.tensor(lengths_reconstruction, dtype=torch.int64)
 
                 inputs_lstm = self.encoder(inputs_pad)
-                outputs_teafo_pad, output_aureg_pad = self.vls_lstm(inputs_lstm, lengths_teafo, lengths_aureg)
+                outputs_teafo_pad, output_aureg_pad = self.vls_lstm(inputs_lstm, lengths_teafo, lengths_aureg, mask_aureg)
 
                 output_teafo_pad_de = self.decoder(outputs_teafo_pad)
                 output_aureg_pad_de = self.decoder(output_aureg_pad)
@@ -642,16 +672,16 @@ def main():
     # # 1. Dataset and DataLoader
     # dataset = TimeSeriesDataset(num_samples=100, max_len=15, feature_size=feature_size)
 
-    # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_prediction_ws/src/nae/data/rllab_dataset_no_orientation/data_enrichment/big_plane/big_plane_enrich_for_training'
-    # thrown_object = 'big_plane'
+    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_prediction_ws/src/nae/data/rllab_dataset_no_orientation/data_enrichment/big_plane/big_plane_enrich_for_training'
+    thrown_object = 'big_plane'
 
-    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_prediction_ws/src/nae/data/nae_paper_dataset/new_data_format/bamboo/split/bamboo'
-    thrown_object = 'bamboo'
+    # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_prediction_ws/src/nae/data/nae_paper_dataset/new_data_format/bamboo/split/bamboo'
+    # thrown_object = 'bamboo'
     
     checkout_path = None
     wdb_run_id=None   # 't5nlloi0'
     wdb_resume=None   # 'allow'
-    enable_wandb = False
+    enable_wandb = True
 
     # Training parameters 
     training_params = {
@@ -693,11 +723,13 @@ def main():
     # input('DEBUG')
     # data_train = data_train[:128]
     # 2. Training
+    # data_train = data_train[:128]
+    # data_val = data_val[:128]
     nae.util_printer.print_green('Start training ...', background=True)
     wdb_notes = f'NAE_DYNAMIC - {model_params["num_layers_lstm"]} LSTM layers, {model_params["hidden_size"]} hidden size, lr={model_params["lr"]}, batch_size={training_params["batch_size_train"]}'
     if enable_wandb:
         nae.init_wandb('nae', run_id=wdb_run_id, resume=wdb_resume, wdb_notes=wdb_notes)
-    saved_model_dir = nae.train(data_train, data_val, checkpoint_path=checkout_path)
+    saved_model_dir = nae.train(data_train, data_val, checkpoint_path=checkout_path, enable_wandb=enable_wandb)
 
 
 if __name__ == '__main__':
