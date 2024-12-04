@@ -46,7 +46,7 @@ class NAE_Utils:
                     return os.path.join(root, file)
         return None
 
-    def save_model_info(self, data_dir, model_dir, data_num, num_epochs, batch_size, start_t, training_t, loss_all_data, wandb_run_url=''):        
+    def save_model_info(self, data_dir, model_dir, data_num, num_epochs, batch_size, start_t, training_t, loss_all_data, wandb_run_url=''): 
         readme_file = os.path.join(model_dir, 'README.md')
         final_loss = loss_all_data[-1][-1]  # Final total loss
         
@@ -109,18 +109,18 @@ class NAE_Utils:
         return loss_graph_path
     
 
-    def score_all_predictions(self, output_teafo_pad_de, labels_teafo_pad, lengths_teafo, 
-                                    output_aureg_pad_de, labels_aureg_pad, lengths_aureg,
+    def score_all_predictions(self, output_teafo_pad_de, labels_teafo_pad, lengths_teafo, mask_teafo,
+                                    output_aureg_pad_de, labels_aureg_pad, lengths_aureg, mask_aureg,
                                     capture_thres=0.1):
 
         # mask_reconstruction = torch.arange(max(lengths_reconstruction)).expand(len(lengths_reconstruction), max(lengths_reconstruction)) < lengths_reconstruction.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
         # mask_reconstruction = mask_reconstruction.to(loss_3.device)
         
         # calculate mask based on lengths_teafo and lengths_aureg
-        mask_teafo = torch.arange(max(lengths_teafo)).expand(len(lengths_teafo), max(lengths_teafo)) < lengths_teafo.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
-        mask_teafo = mask_teafo.to(output_teafo_pad_de.device)
-        mask_aureg = torch.arange(max(lengths_aureg)).expand(len(lengths_aureg), max(lengths_aureg)) < lengths_aureg.unsqueeze(1)
-        mask_aureg = mask_aureg.to(output_aureg_pad_de.device)
+        # mask_teafo = torch.arange(max(lengths_teafo)).expand(len(lengths_teafo), max(lengths_teafo)) < lengths_teafo.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
+        # mask_teafo = mask_teafo.to(output_teafo_pad_de.device)
+        # mask_aureg = torch.arange(max(lengths_aureg)).expand(len(lengths_aureg), max(lengths_aureg)) < lengths_aureg.unsqueeze(1)
+        # mask_aureg = mask_aureg.to(output_aureg_pad_de.device)
         mask_combined = torch.cat([mask_teafo, mask_aureg], dim=1)
 
         output_combined = torch.cat([output_teafo_pad_de, output_aureg_pad_de], dim=1)

@@ -563,8 +563,6 @@ class NAEDynamicLSTM():
                 ##  ----- LOSS 1: TEACHER FORCING -----
                 loss_1 = self.criterion(output_teafo_pad_de, labels_teafo_pad).sum(dim=-1)  # Shape: (batch_size, max_seq_len_out)
                 # Tạo mask dựa trên chiều dài thực
-                mask_teafo = torch.arange(max(lengths_teafo)).expand(len(lengths_teafo), max(lengths_teafo)) < lengths_teafo.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
-                mask_teafo = mask_teafo.to(loss_1.device)
                 loss_1_mask = loss_1 * mask_teafo  # Masked loss
                 loss_1_mean = 0
                 if mask_teafo.sum() != 0:
@@ -572,8 +570,6 @@ class NAEDynamicLSTM():
 
                 ## ----- LOSS 2: AUTOREGRESSIVE -----
                 loss_2 = self.criterion(output_aureg_pad_de, labels_aureg_pad).sum(dim=-1)
-                mask_aureg = torch.arange(max(lengths_aureg)).expand(len(lengths_aureg), max(lengths_aureg)) < lengths_aureg.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
-                mask_aureg = mask_aureg.to(loss_2.device)
                 loss_2_mask = loss_2 * mask_aureg
                 loss_2_mean = 0
                 if mask_aureg.sum() != 0:
@@ -581,8 +577,6 @@ class NAEDynamicLSTM():
 
                 ## ----- LOSS 3: RECONSTRUCTION -----
                 loss_3 = self.criterion(self.decoder(inputs_lstm), labels_reconstruction_pad).sum(dim=-1)
-                mask_reconstruction = torch.arange(max(lengths_reconstruction)).expand(len(lengths_reconstruction), max(lengths_reconstruction)) < lengths_reconstruction.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
-                mask_reconstruction = mask_reconstruction.to(loss_3.device)
                 loss_3_mask = loss_3 * mask_reconstruction
                 loss_3_mean = 0
                 if mask_reconstruction.sum() != 0:
@@ -610,8 +604,8 @@ class NAEDynamicLSTM():
                 (mean_nade_future_b, var_nade_future_b), \
                 (mean_final_step_err_b, var_fe_b), \
                 (mean_capture_success_rate_b, var_capture_success_rate) \
-                = self.utils.score_all_predictions(output_teafo_pad_de, labels_teafo_pad, lengths_teafo, 
-                                                    output_aureg_pad_de, labels_aureg_pad, lengths_aureg,
+                = self.utils.score_all_predictions(output_teafo_pad_de, labels_teafo_pad, lengths_teafo, mask_teafo, 
+                                                    output_aureg_pad_de, labels_aureg_pad, lengths_aureg, mask_aureg,
                                                     capture_thres=0.1)
                 # because MSE divides by batch_size, but we need to sum all to get the total loss and calculate the mean value ourselves, 
                 # so in each batch we need to multiply by batch_size
