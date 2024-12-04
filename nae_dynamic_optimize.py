@@ -12,6 +12,8 @@ import os
 import time
 
 from python_utils.printer import Printer
+from python_utils.plotter import Plotter
+
 from utils.utils import NAE_Utils
 from utils.submodules.training_utils.data_loader import DataLoader as NAEDataLoader
 from utils.submodules.preprocess_utils.data_raw_correction_checker import RoCatRLDataRawCorrectionChecker
@@ -216,8 +218,6 @@ class VLSLSTM(nn.Module):
 
         return output_seq_final
 
-    
-
 #------------------------- TRAINING -------------------------
 class NAEDynamicLSTM():
     def __init__(self, input_size, hidden_size, output_size, num_layers_lstm, lr, 
@@ -259,6 +259,7 @@ class NAEDynamicLSTM():
         print('Parameters number of LSTM: ', self.utils.count_parameters(self.vls_lstm))
         print('Parameters number of decoder: ', self.utils.count_parameters(self.decoder))
         print('Total number of parameters: ', self.utils.count_parameters(self.encoder) + self.utils.count_parameters(self.vls_lstm) + self.utils.count_parameters(self.decoder))
+
 
 
     def collate_pad_fn(self, batch):
@@ -317,7 +318,6 @@ class NAEDynamicLSTM():
 
     def train(self, data_train, data_val, checkpoint_path=None, enable_wandb=False):
         start_t = time.time()
-
         dataloader_train = TorchDataLoader(data_train, batch_size=self.batch_size_train, collate_fn=lambda x: self.collate_pad_fn(x), shuffle=True)
 
         for epoch in range(self.num_epochs):
@@ -397,11 +397,10 @@ class NAEDynamicLSTM():
 
 
             # 2. ----- FOR VALIDATION -----
-            dataloader_val = TorchDataLoader(data_val, batch_size=self.batch_size_val, collate_fn=lambda x: self.collate_pad_fn(x), shuffle=False)
             mean_loss_total_val_log, \
             mean_ade_entire, mean_ade_future, \
             mean_nade_entire, mean_nade_future, \
-            mean_final_step_err, capture_success_rate = self.validate_and_score(dataloader_val)
+            mean_final_step_err, capture_success_rate = self.validate_and_score(data=data_val, batch_size=self.batch_size_val, shuffle=False)
             validate_time = time.time() - start_t - traing_time
       
             # 3. ----- FOR WANDB LOG -----
@@ -513,12 +512,14 @@ class NAEDynamicLSTM():
         print(f'Models were saved to {model_dir}')
         return model_dir
 
-    def validate_and_score(self, dl_val):
+    def validate_and_score(self, data, batch_size, shuffle=False, inference=False):
+
+        dataloader = TorchDataLoader(data, batch_size=batch_size, collate_fn=lambda x: self.collate_pad_fn(x), shuffle=shuffle)
         self.vls_lstm.eval()
         self.encoder.eval()
         self.decoder.eval()
 
-        loss_total_val_log = 0.0
+        loss_total_log = 0.0
         # sum_mse_all = 0.0
         # sum_mse_xyz = 0.0
         sum_ade_entire = 0.0
@@ -528,28 +529,37 @@ class NAEDynamicLSTM():
         sum_final_step_err = 0.0
         sum_capture_success_rate = 0.0
 
+        if inference:
+            predicted_seqs_all = []
+            label_seqs_all = []
         with torch.no_grad():
-            for batch in dl_val:
+            for batch in dataloader:
                 (inputs_pad, lengths_in, mask_in), \
                 (labels_teafo_pad, lengths_teafo, mask_teafo), \
                 (labels_aureg_pad, lengths_aureg, mask_aureg),\
                 (labels_reconstruction_pad, lengths_reconstruction, mask_reconstruction) = batch
 
-                inputs_pad = inputs_pad.to(self.device)
-                labels_teafo_pad = labels_teafo_pad.to(self.device)
-                labels_aureg_pad = labels_aureg_pad.to(self.device)
-                labels_reconstruction_pad= labels_reconstruction_pad.to(self.device)
+                # print('CHECK 2: ', len(inputs_pad[0]), ' ', len(inputs_pad[1]), ' ', len(inputs_pad[2]), ' ', len(inputs_pad[3]))
+                # input()
 
-                lengths_teafo= torch.tensor(lengths_teafo, dtype=torch.int64)
-                lengths_aureg= torch.tensor(lengths_aureg, dtype=torch.int64)
-                lengths_reconstruction= torch.tensor(lengths_reconstruction, dtype=torch.int64)
+                # lengths_teafo= torch.tensor(lengths_teafo, dtype=torch.int64)
+                # lengths_aureg= torch.tensor(lengths_aureg, dtype=torch.int64)
+                # lengths_reconstruction= torch.tensor(lengths_reconstruction, dtype=torch.int64)
 
+                # Predict
                 inputs_lstm = self.encoder(inputs_pad)
                 outputs_teafo_pad, output_aureg_pad = self.vls_lstm(inputs_lstm, lengths_teafo, lengths_aureg, mask_aureg)
-
                 output_teafo_pad_de = self.decoder(outputs_teafo_pad)
                 output_aureg_pad_de = self.decoder(output_aureg_pad)
 
+                if inference:
+                    predicted_seqs = self.merge_pad_trajectories(output_teafo_pad_de, lengths_teafo, output_aureg_pad_de, lengths_aureg)
+                    label_seqs = self.merge_pad_trajectories(labels_teafo_pad, lengths_teafo, labels_aureg_pad, lengths_aureg)
+                    
+                    predicted_seqs_all.extend(predicted_seqs)
+                    label_seqs_all.extend(label_seqs)
+                    continue
+                
                 ##  ----- LOSS 1: TEACHER FORCING -----
                 loss_1 = self.criterion(output_teafo_pad_de, labels_teafo_pad).sum(dim=-1)  # Shape: (batch_size, max_seq_len_out)
                 # Tạo mask dựa trên chiều dài thực
@@ -579,7 +589,7 @@ class NAEDynamicLSTM():
                     loss_3_mean = loss_3_mask.sum() / mask_reconstruction.sum()
 
                 loss_mean = loss_1_mean + loss_2_mean + loss_3_mean
-                loss_total_val_log += loss_mean.item()
+                loss_total_log += loss_mean.item()
 
 
                 ## ----- SCORE -----
@@ -616,38 +626,50 @@ class NAEDynamicLSTM():
                 sum_final_step_err += mean_final_step_err_b*current_batch_size
                 sum_capture_success_rate += mean_capture_success_rate_b*current_batch_size
         
+        if inference:
+            return predicted_seqs_all, label_seqs_all
         # get mean value of scored data
-        mean_loss_total_val_log = loss_total_val_log/len(dl_val.dataset)
-        mean_ade_entire = sum_ade_entire/len(dl_val.dataset)
-        mean_ade_future = sum_ade_future/len(dl_val.dataset)
-        mean_nade_entire = sum_nade_entire/len(dl_val.dataset)
-        mean_nade_future = sum_nade_future/len(dl_val.dataset)
-        mean_final_step_err = sum_final_step_err/len(dl_val.dataset)
-        capture_success_rate = sum_capture_success_rate/len(dl_val.dataset)
+        mean_loss_total_log = loss_total_log/len(dataloader.dataset)
+        mean_ade_entire = sum_ade_entire/len(dataloader.dataset)
+        mean_ade_future = sum_ade_future/len(dataloader.dataset)
+        mean_nade_entire = sum_nade_entire/len(dataloader.dataset)
+        mean_nade_future = sum_nade_future/len(dataloader.dataset)
+        mean_final_step_err = sum_final_step_err/len(dataloader.dataset)
+        capture_success_rate = sum_capture_success_rate/len(dataloader.dataset)
         
-        return mean_loss_total_val_log, mean_ade_entire, mean_ade_future, mean_nade_entire, mean_nade_future, mean_final_step_err, capture_success_rate
+        return mean_loss_total_log, mean_ade_entire, mean_ade_future, mean_nade_entire, mean_nade_future, mean_final_step_err, capture_success_rate
 
     def concat_output_seq(self, out_seq_teafo, out_seq_aureg):
         # Nối 2 chuỗi đầu ra (dọc theo chiều thời gian - dim=1)
+        out_seq_teafo = [out.cpu().numpy() for out in out_seq_teafo]
+        out_seq_aureg = [out.cpu().numpy() for out in out_seq_aureg]
         concatenated_seq = []
         for seq_teafo, seq_aureg in zip(out_seq_teafo, out_seq_aureg):
             # Nối mỗi cặp chuỗi của teacher forcing và autoregressive
-            concatenated = torch.cat([seq_teafo, seq_aureg], dim=1)  # Dim=1 là chiều thời gian
+            # concatenated = torch.cat([seq_teafo, seq_aureg], dim=1)  # Dim=1 là chiều thời gian
+            seq_teafo = np.array(seq_teafo)
+            seq_aureg = np.array(seq_aureg)
+            # print('check seq_teafo shape: ', seq_teafo.shape)
+            # print('check seq_aureg shape: ', seq_aureg.shape)
+            concatenated = np.concatenate([seq_teafo, seq_aureg], axis=0)
+            # print('check concatenated shape: ', concatenated.shape)
+            # input()
             concatenated_seq.append(concatenated)
+            
         return concatenated_seq
 
-    def load_model(self, model_weights_dir):
+    def load_model(self, model_weights_dir, weights_only=False):
         encoder_model_path = self.utils.look_for_file(model_weights_dir, 'encoder_model.pth')
         lstm_model_path = self.utils.look_for_file(model_weights_dir, 'lstm_model.pth')
         decoder_model_path = self.utils.look_for_file(model_weights_dir, 'decoder_model.pth')
 
-        self.encoder.load_state_dict(torch.load(encoder_model_path))
+        self.encoder.load_state_dict(torch.load(encoder_model_path, weights_only=weights_only))
         self.encoder.to(self.device)
 
-        self.vls_lstm.load_state_dict(torch.load(lstm_model_path))
+        self.vls_lstm.load_state_dict(torch.load(lstm_model_path, weights_only=weights_only))
         self.vls_lstm.to(self.device)
 
-        self.decoder.load_state_dict(torch.load(decoder_model_path))
+        self.decoder.load_state_dict(torch.load(decoder_model_path, weights_only=weights_only))
         self.decoder.to(self.device)
     def data_correction_check(self, data_train, data_val, data_test):
         data_collection_checker = RoCatRLDataRawCorrectionChecker()
@@ -661,6 +683,15 @@ class NAEDynamicLSTM():
                 return False
         self.util_printer.print_green('     Data is correct', background=True)
         return True
+    
+    def merge_pad_trajectories(self, output_teafo_pad_de, lengths_teafo, output_aureg_pad_de, lengths_aureg):
+        # unpad the output sequences
+        output_teafo_unpad = [out[:len_real] for out, len_real in zip(output_teafo_pad_de, lengths_teafo)]
+        output_aureg_unpad = [out[:len_real] for out, len_real in zip(output_aureg_pad_de, lengths_aureg)]
+        # merge two sequences
+        predicted_seq = self.concat_output_seq(output_teafo_unpad, output_aureg_unpad)
+        return predicted_seq
+
 
 def main():
     device = torch.device('cuda')
@@ -672,11 +703,11 @@ def main():
     # # 1. Dataset and DataLoader
     # dataset = TimeSeriesDataset(num_samples=100, max_len=15, feature_size=feature_size)
 
-    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_prediction_ws/src/nae/data/rllab_dataset_no_orientation/data_enrichment/big_plane/big_plane_enrich_for_training'
-    thrown_object = 'big_plane'
-
-    # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_prediction_ws/src/nae/data/nae_paper_dataset/new_data_format/bamboo/split/bamboo'
-    # thrown_object = 'bamboo'
+    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_prediction_ws/src/nae/data/nae_paper_dataset/new_data_format/bamboo/split/bamboo'
+    thrown_object = 'bamboo'
+    
+    # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_prediction_ws/src/nae/data/rllab_dataset_no_orientation/data_enrichment/big_plane/big_plane_enrich_for_training'
+    # thrown_object = 'big_plane'
     
     checkout_path = None
     wdb_run_id=None   # 't5nlloi0'
@@ -697,7 +728,7 @@ def main():
         'hidden_size': 128,
         'output_size': 9,
         'num_layers_lstm': 2,
-        'lr': 0.0002
+        'lr': 0.0001
     }
 
     nae = NAEDynamicLSTM(**model_params, **training_params, data_dir=data_dir, device=device)
