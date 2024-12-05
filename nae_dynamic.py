@@ -14,10 +14,10 @@ import time
 from python_utils.printer import Printer
 from python_utils.plotter import Plotter
 
-from utils.utils import NAE_Utils
-from utils.submodules.training_utils.data_loader import DataLoader as NAEDataLoader
-from utils.submodules.preprocess_utils.data_raw_correction_checker import RoCatRLDataRawCorrectionChecker
-from utils.submodules.training_utils.input_label_generator import InputLabelGenerator
+from nae_core.utils.utils import NAE_Utils
+from nae_core.utils.submodules.training_utils.data_loader import DataLoader as NAEDataLoader
+from nae_core.utils.submodules.preprocess_utils.data_raw_correction_checker import RoCatRLDataRawCorrectionChecker
+from nae_core.utils.submodules.training_utils.input_label_generator import InputLabelGenerator
 
 class TimeSeriesDataset(Dataset):
     def __init__(self, num_samples=100, max_len=10, feature_size=32):
@@ -686,85 +686,6 @@ class NAEDynamicLSTM():
         # merge two sequences
         predicted_seq = self.concat_output_seq(output_teafo_unpad, output_aureg_unpad)
         return predicted_seq
-
-    def accumulated_error_cal(self, input_seqs, label_seqs, predicted_seqs, object_name, trajectory_id=None, plot=False):
-        '''
-        We will examine how the accumulated error changes with increasing input length
-        The input data length is increased by 1 data point each time
-        The input_seqs includes input seqs with increasing length
-        (We will get mean accumulated error for each input length)
-        '''
-        
-        # 1. Calculate accumulated error for each prediction
-        _accumulated_error_by_input_length = []
-        last_err_list = []
-        # count = 0
-
-        # Consider one group (input, label, predicted) at a time
-        for inp, pred, lab in zip(input_seqs, predicted_seqs, label_seqs):
-            # Only calculate the accumulated error for the first 3 dimensions x, y, z
-            inp = inp[:, :3]
-            lab = lab[:, :3]
-            pred = pred[:, :3]
-            # input('check pred, lab shape: ' + str(pred.shape) + ' ' + str(lab.shape))
-
-            dis = np.linalg.norm(pred - lab, axis=-1)
-            _accumulated_error = np.mean(dis)
-            # if count == 0 or count == len(input_seqs)-1:
-            #     print('count: ', count)
-            #     print('     distance: ', dis)
-            #     print('     MEAN: ', _accumulated_error)
-            #     input()
-            # count += 1
-
-
-            pred_last = pred[-1]
-            lab_last = lab[-1]
-            last_err = np.linalg.norm(pred_last - lab_last)
-            last_err_list.append(last_err)
-
-            err_by_inlen = {
-                'input_len': len(inp),
-                '_accumulated_error': _accumulated_error
-            }
-            _accumulated_error_by_input_length.append(err_by_inlen) 
-        # 2. Plot
-        if plot:
-            # 2.1 Show line chart of change in accumulated error with increasing input length
-            input_lengths = [acer['input_len'] for acer in _accumulated_error_by_input_length]
-            mean_acc_errs = [acer['_accumulated_error'] for acer in _accumulated_error_by_input_length]
-            self.util_plotter.plot_line_chart(x_values = input_lengths, y_values = [mean_acc_errs], 
-                                            x_tick_distance=5, 
-                                            y_tick_distance=0.02,
-                                            font_size_title=32,
-                                            font_size_label=24,
-                                            font_size_tick=20,
-                                            title=f'{object_name} - Accumulated error by input length - Trajectory #{trajectory_id}', 
-                                            x_label='Input length (data points)', 
-                                            y_label='Accumulated error (m)',
-                                            legends=None,
-                                            save_plot=True)
-            # 2.2 Show the predictions in 3D plot
-            self.util_plotter.plot_predictions_plotly(inputs=input_seqs, labels=label_seqs, predictions=predicted_seqs, 
-                                                      title=f'{object_name} - Predictions - Trajectory #{trajectory_id}', rotate_data_whose_y_up=True, 
-                                                      save_plot=False, font_size_note=12,
-                                                      show_all_as_default=False)
-
-        return _accumulated_error_by_input_length
-    
-    def is_proper_prediction(self, input_data, label_seqs):
-        # We determine based on the input data and the label data
-        for in_check, la_check in zip(input_data, label_seqs):
-            in_check_cut = np.array(in_check[1:])
-            la_check_cut = np.array(la_check[:in_check_cut.shape[0]])
-            same = np.allclose(in_check_cut, la_check_cut)
-            if not same:
-                self.util_printer.print_red(f'{len(input_data)} labels are incorrect', background=True)
-                self.util_plotter.plot_predictions([in_check], [la_check], lim_plot_num=None, rotate_data_whose_y_up=False, title=f'{same}')
-                return False
-        return True
-    
-
 
 def main():
     device = torch.device('cuda')
