@@ -538,23 +538,18 @@ class NAEDynamicLSTM():
             wandb.finish()
         return final_model_dir
     
-    def _init_logging(self, logging_level, test_anomaly, test_cuda_blocking):
-        # make the log file in the same directory as the script
-        # Xác định thư mục chứa script
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        time_now = time.strftime('%Y%m%d_%H%M%S')
-        script_dir = os.path.join(script_dir, 'logs', f'log_{time_now}')
-        # make the folder for the log file
-        os.makedirs(os.path.join(script_dir), exist_ok=True)
+    def _init_logging(self, logging_level, test_anomaly, test_cuda_blocking):    
+        # Save to self.model_dir
+        os.makedirs(self.model_dir, exist_ok=True)
         log_filename = f"train_log.log"
-        log_filename = os.path.join(script_dir, log_filename)
+        log_filename = os.path.join(self.model_dir, log_filename)
         self.util_printer.print_green(f"Log file: {log_filename}", background=True)
 
         logging.basicConfig(filename=log_filename, level=logging_level, format="%(asctime)s - %(levelname)s - %(message)s")
-        logging.info("Starting training...")
-        logging.info("  test_anomaly: " + str(test_anomaly))
-        logging.info("  test_cuda_blocking: " + str(test_cuda_blocking))
-        logging.info("---------------------------")
+        logging.warning("Starting training...")
+        logging.warning("  test_anomaly: " + str(test_anomaly))
+        logging.warning("  test_cuda_blocking: " + str(test_cuda_blocking))
+        logging.warning("---------------------------")
 
     def init_wandb(self, project_name, run_id=None, resume=None, wdb_notes=''):        
         wandb.init(
