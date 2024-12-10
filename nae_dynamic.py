@@ -102,63 +102,27 @@ class VLSLSTM(nn.Module):
 
     def forward(self, x, lengths_in, lengths_aureg, mask_aureg):
         this_batch_size = x.size(0)
-        logging.info("      VLSLSTM - 1")
         packed_x = pack_padded_sequence(x, lengths_in, batch_first=True, enforce_sorted=False)
-        logging.info("      VLSLSTM - 2")
-
-
         hi = torch.zeros(self.num_layers, this_batch_size, self.hidden_size).to(x.device)
         ci = torch.zeros(self.num_layers, this_batch_size, self.hidden_size).to(x.device)
         outputs_teafo_unpad = [] # teacher forcing output sequences
 
         #----- teacher forcing -----
-        logging.info("      VLSLSTM - 3")
-
         outputs, (hi, ci) = self.lstm(packed_x, (hi, ci))
-        logging.info("      VLSLSTM - 4")
-
         # unpack and only keep real steps, not the padding based on lengths_teacher_forcing
         # Unpack dữ liệu packed outputs
         outputs_teafo_pad, len_real_teafo = pad_packed_sequence(outputs, batch_first=True)
-        # print('lengths_teacher_forcing: ', lengths_teacher_forcing)
-        # print('len_real_teafo: ', len_real_teafo)
-
-        logging.info("      VLSLSTM - 5")
-
         # Slicing để lấy từng chuỗi theo độ dài thực
         batch_indices = torch.arange(outputs_teafo_pad.size(0))  # [0, 1, 2]
         outputs_teafo_unpad = [outputs_teafo_pad[i, :len_real_teafo[i], :] for i in batch_indices]
 
-        
         #----- autoregressive -----
         # 1. Lấy output cuối cùng của teacher forcing
         input_aureg_init = [out[-1] for out in outputs_teafo_unpad]
         input_aureg_init = torch.stack(input_aureg_init, dim=0).unsqueeze(1)  # (batch_size, 1, hidden_size)
-        # print('check input_aureg_init shape: ', input_aureg_init.shape)
-        # print('check hi shape: ', hi.shape)
-        # print('check ci shape: ', ci.shape)
-        # input()
-        logging.info("      VLSLSTM - 6")
-
         outputs_aureg_unpad = self.auto_regressive_loop(input_aureg_init, hi, ci, lengths_aureg, mask_aureg)
-        logging.info("      VLSLSTM - 7")
-        # Nối 2 chuỗi output lại với nhau (dim=1 là chiều thời gian)
-
-        # print('outputs_aureg_unpad length: ', len(outputs_aureg_unpad))
-        # print('lengths_teacher_forcing: ', lengths_teacher_forcing)
-        # print('lengths_aureg: ', lengths_aureg)
-        # for seq in outputs_aureg_unpad:
-        #     print('     seq shape: ', seq.shape)
-
-        # out_seq = self.concat_output_seq(outputs_teafo_unpad, outputs_aureg_unpad)
-
         # padding outputs_aureg_unpad
         outputs_aureg_pad = pad_sequence(outputs_aureg_unpad, batch_first=True) 
-        logging.info("      VLSLSTM - 8")
-
-        # print('check output_teafo_pad shape: ', output_teafo_pad.shape)
-        # print('check outputs_aureg_pad shape: ', outputs_aureg_pad.shape)
-        # input()
         return outputs_teafo_pad, outputs_aureg_pad
     
     def auto_regressive_loop(self, input_aureg_init, hi, ci, lengths_aureg, mask_aureg):
@@ -178,30 +142,17 @@ class VLSLSTM(nn.Module):
 
         output_seq = torch.zeros(batch_size, max_len, hidden_size).to(input_aureg_init[0].device)
 
-
         # Lấy bước đầu tiên làm đầu vào ban đầu
         lstm_input = input_aureg_init  # Kích thước (batch_size, 1, feature_size)
-        logging.info("      VLSLSTM - 6.1")
         # Duyệt qua từng bước thời gian
         for t in range(max_len):
-            logging.info(f'     VLSLSTM - Step {t} ----------------- mask_aureg shape: {mask_aureg.shape}')
-
             current_mask = mask_aureg[:, t]  # Mask tại bước thời gian t            # lần 3: lỗi ở đây
-            logging.info(f'          VLSLSTM - current_mask sum: {current_mask.sum()}')
-
             if not current_mask.any():  # Nếu tất cả đều là padding, dừng lại
-                logging.info("          VLSLSTM - current_mask.any() = False -> exit")
+                logging.error("          VLSLSTM - current_mask.any() = False -> exit")
                 print('current_mask.any() = False -> exit')
                 break
 
             # Lọc các chuỗi thực tại bước thời gian hiện tại
-            logging.info(f'          VLSLSTM - 6.1.0: ' + 
-                         f'lstm_input: {lstm_input.shape} ({lstm_input.device}) ' + 
-                         f'current_mask: {current_mask.shape} ({current_mask.device}) (sum: {current_mask.sum()})' + 
-                         f'hi: {hi.shape} ({hi.device}) ' + 
-                         f'ci: {ci.shape} ({ci.device})')
-            
-            #           VLSLSTM - 6.1.0: 
             #           lstm_input: torch.Size([256, 1, 128]) (cuda:0) 
             #           current_mask: torch.Size([256]) (cuda:0) (sum: 143)
             #           hi: torch.Size([2, 256, 128]) (cuda:0) 
@@ -211,34 +162,22 @@ class VLSLSTM(nn.Module):
             ci_current = ci[:, current_mask, :]  # (num_layers, num_real_sequences, hidden_size)
 
             # Truyền qua LSTM
-            logging.info("          VLSLSTM - 6.1.1")
             output, (hi_new, ci_new) = self.lstm(lstm_input, (hi_current, ci_current))
-            logging.info("          VLSLSTM - 6.1.2")
-
             # Cập nhật trạng thái ẩn cho các chuỗi thực
             hi[:, current_mask, :] = hi_new
             ci[:, current_mask, :] = ci_new
 
             # Lưu output vào tensor output_seq
             temp_output = torch.zeros(batch_size, 1, hidden_size, device=output.device, dtype=output.dtype)
-            logging.info("          VLSLSTM - 6.1.3")
-
             temp_output[current_mask] = output  # Ghi output của các chuỗi thực
-            logging.info("          VLSLSTM - 6.1.4")
-
             # Cập nhật đầu vào cho bước tiếp theo
             lstm_input = temp_output[:, -1:, :]  # Sử dụng output hiện tại làm input tiếp theo
-
             # output_seq.append(temp_output[current_mask])  # Thêm vào danh sách output
-            logging.info("          VLSLSTM - 6.1.5")
-
             output_seq[:, t:t+1, :] = temp_output
-            logging.info("          VLSLSTM - 6.1.6")
         
         # print('check output_seq shape: ', output_seq.shape)
         # filter padding and save to a list
         output_seq_final = [output_seq[i, :lengths_aureg[i], :] for i in range(batch_size)]
-        logging.info("          VLSLSTM - 6.2")
 
         return output_seq_final
 
@@ -381,48 +320,16 @@ class NAEDynamicLSTM():
             (labels_aureg_pad, lengths_aureg, mask_aureg),
             (labels_reconstruction_pad, lengths_reconstruction, mask_reconstruction),
         )
-
-    def setup_screen_print_logging(self, log_filename="output.log"):
-        # Mở file log
-        log_file = open(log_filename, "w")
-        
-        # Redirect cả stdout và stderr vào file log
-        sys.stdout = log_file
-        sys.stderr = log_file
-
-        # Ghi log thông báo
-        print(f"Logging started. All output will be saved to {log_filename}")
-
-    def train(self, data_train, data_val, checkpoint_path=None, enable_wandb=False, test_anomaly=False, test_cuda_blocking=False):
-        # make the log file in the same directory as the script
-        # Xác định thư mục chứa script
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        time_now = time.strftime('%Y%m%d_%H%M%S')
-        script_dir = os.path.join(script_dir, 'logs', f'log_{time_now}')
-        # make the folder for the log file
-        os.makedirs(os.path.join(script_dir), exist_ok=True)
-        log_filename = f"train_log.log"
-        log_filename = os.path.join(script_dir, log_filename)
-        self.util_printer.print_green(f"Log file: {log_filename}", background=True)
-
-        logging.basicConfig(filename=log_filename, level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
-        logging.info("Starting training...")
-        logging.info("  test_anomaly: " + str(test_anomaly))
-        logging.info("  test_cuda_blocking: " + str(test_cuda_blocking))
-
-
+    
+    def train(self, data_train, data_val, checkpoint_path=None, enable_wandb=False, test_anomaly=False, test_cuda_blocking=False, logging_level=logging.WARNING):
+        self._init_logging(logging_level, test_anomaly, test_cuda_blocking)
         try:
-            # Redirect stdout và stderr
-            # sys.stdout = open(log_filename, "a")
-            # sys.stderr = open(log_filename, "a")
-            # print('44444444\n')
 
-            # Kiểm tra chế độ debug độc lập
+            # For debugging
             if test_anomaly:
                 logging.info("Testing torch.autograd.set_detect_anomaly(True)")
                 torch.autograd.set_detect_anomaly(True)
-            elif test_cuda_blocking:
+            if test_cuda_blocking:
                 logging.info("Testing CUDA_LAUNCH_BLOCKING")
                 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
@@ -446,27 +353,16 @@ class NAEDynamicLSTM():
                 batch_idx = 0
                 for batch in dataloader_train:
                     batch_idx += 1
-
-
                     logging.info(f"\nBatch {batch_idx}:")
                     try:
                         logging.info(f"TRAINING:")
-                        # Lần 1: lỗi sau print này
                         (inputs_pad, lengths_in, mask_in), \
                         (labels_teafo_pad, lengths_teafo, mask_teafo), \
                         (labels_aureg_pad, lengths_aureg, mask_aureg),\
                         (labels_reconstruction_pad, lengths_reconstruction, mask_reconstruction) = batch
-                        logging.info("  111")
                         with autocast(device_type='cuda'):
-                            logging.info("  Before forward pass")
                             inputs_lstm = self.encoder(inputs_pad)
-                            logging.info("  After forward pass - Encoder")
-
-                            logging.info("Before LSTM forward pass")
-                            # Lần 2: lỗi ở lệnh này
                             outputs_teafo_pad, output_aureg_pad = self.vls_lstm(inputs_lstm, lengths_teafo, lengths_aureg, mask_aureg)
-                            logging.info("After LSTM forward pass")
-
                             output_teafo_pad_de = self.decoder(outputs_teafo_pad)
                             output_aureg_pad_de = self.decoder(output_aureg_pad)
 
@@ -494,79 +390,67 @@ class NAEDynamicLSTM():
 
                             if torch.isnan(loss_1_mean) or torch.isinf(loss_1_mean):
                                 print(f"loss_1_mean contains NaN or Infinity: {loss_1_mean}")
-                                logging.error(f"loss_1_mean contains NaN or Infinity: {loss_1_mean}")
+                                logging.error(f"Epoch {epoch} - loss_1_mean contains NaN or Infinity: {loss_1_mean}")
 
                             # Kiểm tra loss_2_mean
                             if torch.isnan(loss_2_mean) or torch.isinf(loss_2_mean):
                                 print(f"loss_2_mean contains NaN or Infinity: {loss_2_mean}")
-                                logging.error(f"loss_2_mean contains NaN or Infinity: {loss_2_mean}")
+                                logging.error(f"Epoch {epoch} - loss_2_mean contains NaN or Infinity: {loss_2_mean}")
 
                             # Kiểm tra loss_3_mean
                             if torch.isnan(loss_3_mean) or torch.isinf(loss_3_mean):
                                 print(f"loss_3_mean contains NaN or Infinity: {loss_3_mean}")
-                                logging.error(f"loss_3_mean contains NaN or Infinity: {loss_3_mean}")
-
-
-
+                                logging.error(f"Epoch {epoch} - loss_3_mean contains NaN or Infinity: {loss_3_mean}")
 
                             # Kiểm tra kết nối với đồ thị tính toán
                             try:
                                 assert loss_1_mean.requires_grad, "loss_1_mean is detached from the computation graph"
                             except AssertionError as e:
-                                logging.error(f"loss_1_mean is detached: {loss_1_mean}")
+                                logging.error(f"Epoch {epoch} - loss_1_mean is detached: {loss_1_mean}")
                                 raise e
                             try:
                                 assert loss_2_mean.requires_grad, "loss_2_mean is detached from the computation graph"
                             except AssertionError as e:
-                                logging.error(f"loss_2_mean is detached: {loss_2_mean}")
+                                logging.error(f"Epoch {epoch} - loss_2_mean is detached: {loss_2_mean}")
                                 raise e
                             try:
                                 assert loss_3_mean.requires_grad, "loss_3_mean is detached from the computation graph"
                             except AssertionError as e:
-                                logging.error(f"loss_3_mean is detached: {loss_3_mean}")
+                                logging.error(f"Epoch {epoch} - loss_3_mean is detached: {loss_3_mean}")
                                 raise e
-
-
-
 
                             loss_mean = loss_1_mean + loss_2_mean + loss_3_mean
 
                             if torch.isnan(loss_mean) or torch.isinf(loss_mean):
                                 print(f"loss_mean contains NaN or Infinity: {loss_mean}")
-                                logging.error(f"loss_mean contains NaN or Infinity: {loss_mean}")
+                                logging.error(f"Epoch {epoch} - loss_mean contains NaN or Infinity: {loss_mean}")
                                 raise ValueError("NaN detected in loss!")
 
                         # Backward pass
                         self.optimizer.zero_grad()
                         try:
-                            
-                            logging.info("Before backward pass")
                             loss_mean.backward()        # Lần 1.5 lỗi ở đây
-                            logging.info("After backward pass")
-
                             for name, param in self.encoder.named_parameters():
                                 if param.grad is not None:
                                     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
-                                        print(f"    ENCODER: Gradient for {name} contains NaN or Infinity before backward!")
-                                        logging.error(f"    ENCODER: Gradient for {name} contains NaN or Infinity before backward!")
+                                        print(f"Epoch {epoch} -     ENCODER: Gradient for {name} contains NaN or Infinity before backward!")
+                                        logging.error(f"Epoch {epoch} -     ENCODER: Gradient for {name} contains NaN or Infinity before backward!")
                             for name, param in self.vls_lstm.named_parameters():
                                 if param.grad is not None:
                                     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
-                                        print(f"    VLS_LSTM: Gradient for {name} contains NaN or Infinity before backward!")
-                                        logging.error(f"    VLS_LSTM: Gradient for {name} contains NaN or Infinity before backward!")
+                                        print(f"Epoch {epoch} -     VLS_LSTM: Gradient for {name} contains NaN or Infinity before backward!")
+                                        logging.error(f"Epoch {epoch} -     VLS_LSTM: Gradient for {name} contains NaN or Infinity before backward!")
                                 
                             for name, param in self.decoder.named_parameters():
                                 if param.grad is not None:
                                     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
-                                        print(f"    DECODER: Gradient for {name} contains NaN or Infinity before backward!")
-                                        logging.error(f"    DECODER: Gradient for {name} contains NaN or Infinity before backward!")
+                                        print(f"Epoch {epoch} -     DECODER: Gradient for {name} contains NaN or Infinity before backward!")
+                                        logging.error(f"Epoch {epoch} -     DECODER: Gradient for {name} contains NaN or Infinity before backward!")
                             
-                            
-    
                         except RuntimeError as e:
-                            logging.error("     RuntimeError during backward pass!")
-                            logging.error("         Error message: %s", str(e))
-                            logging.error("         Stack trace:")
+                            logging.error(f"Epoch {epoch} -      RuntimeError during backward pass!")
+                            logging.error(f"Epoch {epoch} -          Error message: %s", str(e))
+                            logging.error(f"Epoch {epoch} -          Stack trace:")
                             logging.error(traceback.format_exc())  # Ghi lại toàn bộ stack trace
                             raise e
                         # torch.nn.utils.clip_grad_norm_(self.encoder.parameters(), max_norm=1.0)
@@ -578,24 +462,14 @@ class NAEDynamicLSTM():
                         loss_2_train_log += loss_2_mean.item()
                         loss_3_train_log += loss_3_mean.item()
 
-                        # Log tài nguyên sau mỗi batch
-                        if batch_idx % 10 == 0:
-                            logging.info(f"     Epoch {epoch}, Batch {batch_idx}: Loss = {loss_mean.item():.6f}")
-                            sys.stderr.flush()
-
                     except RuntimeError as e:
-                        logging.error("     RuntimeError during training!")
-                        logging.error("         Error message: %s", str(e))
-                        logging.error("         Stack trace:")
+                        logging.error(f"Epoch {epoch} -      RuntimeError during training!")
+                        logging.error(f"Epoch {epoch} -          Error message: %s", str(e))
+                        logging.error(f"Epoch {epoch} -          Stack trace:")
                         logging.error(traceback.format_exc())  # Log stack trace đầy đủ
                         sys.stderr.flush()
                         log_resources(epoch)
-
                         raise e
-
-
-
-
 
 
                 # get average loss over all batches
@@ -617,11 +491,11 @@ class NAEDynamicLSTM():
                     mean_loss_total_val_log, \
                     mean_ade_entire, mean_ade_future, \
                     mean_nade_entire, mean_nade_future, \
-                    mean_final_step_err, capture_success_rate = self.validate_and_score(data=data_val, batch_size=self.batch_size_val, shuffle=False)
+                    mean_final_step_err, capture_success_rate = self.validate_and_score(data=data_val, batch_size=self.batch_size_val, shuffle=False, epoch=epoch)
                 except RuntimeError as e:
-                    logging.error("     RuntimeError during validation!")
-                    logging.error("         Error message: %s", str(e))
-                    logging.error("         Stack trace:")
+                    logging.error("Epoch {epoch} - VAL      RuntimeError during validation!")
+                    logging.error("Epoch {epoch} - VAL      Error message: %s", str(e))
+                    logging.error("Epoch {epoch} - VAL      Stack trace:")
                     logging.error(traceback.format_exc())
                     raise e
                 
@@ -664,6 +538,24 @@ class NAEDynamicLSTM():
             wandb.finish()
         return final_model_dir
     
+    def _init_logging(self, logging_level, test_anomaly, test_cuda_blocking):
+        # make the log file in the same directory as the script
+        # Xác định thư mục chứa script
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        time_now = time.strftime('%Y%m%d_%H%M%S')
+        script_dir = os.path.join(script_dir, 'logs', f'log_{time_now}')
+        # make the folder for the log file
+        os.makedirs(os.path.join(script_dir), exist_ok=True)
+        log_filename = f"train_log.log"
+        log_filename = os.path.join(script_dir, log_filename)
+        self.util_printer.print_green(f"Log file: {log_filename}", background=True)
+
+        logging.basicConfig(filename=log_filename, level=logging_level, format="%(asctime)s - %(levelname)s - %(message)s")
+        logging.info("Starting training...")
+        logging.info("  test_anomaly: " + str(test_anomaly))
+        logging.info("  test_cuda_blocking: " + str(test_cuda_blocking))
+        logging.info("---------------------------")
+
     def init_wandb(self, project_name, run_id=None, resume=None, wdb_notes=''):        
         wandb.init(
             # set the wandb project where this run will be logged
@@ -737,14 +629,11 @@ class NAEDynamicLSTM():
             'loss': loss_all_data,
         }, checkpoint_path)
         
-        
-        # loss_graph_image_path = self.utils.save_loss(loss_all_data, model_dir)
-        
         self.utils.save_model_info(self.data_dir, model_dir, data_num, self.num_epochs, self.batch_size_train, start_t, training_t, loss_all_data, self.wandb_run_url)
         print(f'Models were saved to {model_dir}')
         return model_dir
 
-    def validate_and_score(self, data, batch_size, shuffle=False, inference=False):
+    def validate_and_score(self, data, batch_size, shuffle=False, inference=False, epoch=''):
 
         dataloader = TorchDataLoader(data, batch_size=batch_size, collate_fn=lambda x: self.collate_pad_fn(x), shuffle=shuffle)
         self.vls_lstm.eval()
@@ -779,12 +668,8 @@ class NAEDynamicLSTM():
                 # lengths_reconstruction= torch.tensor(lengths_reconstruction, dtype=torch.int64)
 
                 # Predict
-                logging.info("  Before forward pass")
                 inputs_lstm = self.encoder(inputs_pad)
-                logging.info("  After forward pass - Encoder")
-                logging.info("Before LSTM forward pass")
                 outputs_teafo_pad, output_aureg_pad = self.vls_lstm(inputs_lstm, lengths_teafo, lengths_aureg, mask_aureg)
-                logging.info("After LSTM forward pass")
                 output_teafo_pad_de = self.decoder(outputs_teafo_pad)
                 output_aureg_pad_de = self.decoder(output_aureg_pad)
 
@@ -820,39 +705,28 @@ class NAEDynamicLSTM():
 
                 if torch.isnan(loss_1_mean) or torch.isinf(loss_1_mean):
                     print("loss_1_mean contains NaN or Infinity!")
-                    logging.error("loss_1_mean contains NaN or Infinity!")
+                    logging.error(f"Epoch {epoch} - loss_1_mean contains NaN or Infinity!")
 
                 # Kiểm tra loss_2_mean
                 if torch.isnan(loss_2_mean) or torch.isinf(loss_2_mean):
                     print("loss_2_mean contains NaN or Infinity!")
-                    logging.error("loss_2_mean contains NaN or Infinity!")
+                    logging.error(f"Epoch {epoch} - loss_2_mean contains NaN or Infinity!")
 
                 # Kiểm tra loss_3_mean
                 if torch.isnan(loss_3_mean) or torch.isinf(loss_3_mean):
                     print("loss_3_mean contains NaN or Infinity!")
-                    logging.error("loss_3_mean contains NaN or Infinity!")
+                    logging.error(f"Epoch {epoch} - loss_3_mean contains NaN or Infinity!")
                     
                 loss_mean = loss_1_mean + loss_2_mean + loss_3_mean
 
                 # Kiểm tra NaN
                 if torch.isnan(loss_mean):
-                    logging.error("     Loss contains NaN!")
-                    raise ValueError("NaN detected in loss!")
+                    logging.error(f"Epoch {epoch} -      Loss contains NaN!")
+                    raise ValueError("     NaN detected in loss!")
                 loss_total_log += loss_mean.item()
 
 
                 ## ----- SCORE -----
-                # # unpad the output sequences
-                # output_teafo_unpad = [out[:len_real] for out, len_real in zip(output_teafo_pad_de, lengths_teafo)]
-                # output_aureg_unpad = [out[:len_real] for out, len_real in zip(output_aureg_pad_de, lengths_aureg)]
-                # merge two sequences
-                # predicted_seq = self.concat_output_seq(output_teafo_unpad, output_aureg_unpad)
-
-                # # unpad the label sequences
-                # label_teafo_unpad = [seq[:len_real] for seq, len_real in zip(labels_teafo_pad, lengths_teafo)]
-                # label_aureg_unpad = [seq[:len_real] for seq, len_real in zip(labels_aureg_pad, lengths_aureg)]
-                # label_seq = self.concat_output_seq(label_teafo_unpad, label_aureg_unpad)
-
                 (mean_ade_entire_b, var_ade_entire_b), \
                 (mean_ade_future_b, var_ade_future_b), \
                 (mean_nade_entire_b, var_nade_entire_b), \
