@@ -126,16 +126,6 @@ class VLSLSTM(nn.Module):
         return outputs_teafo_pad, outputs_aureg_pad
     
     def auto_regressive_loop(self, input_aureg_init, hi, ci, lengths_aureg, mask_aureg):
-        """
-        Thực hiện dự đoán autoregressive.
-        
-        Args:
-            batch_x_padded: Tensor đầu vào đã được padding, kích thước (batch_size, seq_len, feature_size).
-            lengths_aureg: Độ dài thực của từng chuỗi trong batch, kích thước (batch_size,).
-        
-        Returns:
-            output_seq: Tensor đầu ra của mô hình, kích thước (batch_size, seq_len, hidden_size).
-        """
         batch_size = input_aureg_init.size(0)
         max_len = lengths_aureg.max().item()
         hidden_size = self.lstm.hidden_size
@@ -146,17 +136,13 @@ class VLSLSTM(nn.Module):
         lstm_input = input_aureg_init  # Kích thước (batch_size, 1, feature_size)
         # Duyệt qua từng bước thời gian
         for t in range(max_len):
-            current_mask = mask_aureg[:, t]  # Mask tại bước thời gian t            # lần 3: lỗi ở đây
+            current_mask = mask_aureg[:, t]  # Mask tại bước thời gian t            
             if not current_mask.any():  # Nếu tất cả đều là padding, dừng lại
                 logging.error("          VLSLSTM - current_mask.any() = False -> exit")
                 print('current_mask.any() = False -> exit')
                 break
 
-            # Lọc các chuỗi thực tại bước thời gian hiện tại
-            #           lstm_input: torch.Size([256, 1, 128]) (cuda:0) 
-            #           current_mask: torch.Size([256]) (cuda:0) (sum: 143)
-            #           hi: torch.Size([2, 256, 128]) (cuda:0) 
-            #           ci: torch.Size([2, 256, 128]) (cuda:0)
+            # Bỏ những phần tử được padding dựa vào mask, các tensor sẽ được rút ngắn lại theo chiều batch_size
             lstm_input = lstm_input[current_mask]  # (num_real_sequences, 1, feature_size)
             hi_current = hi[:, current_mask, :]  # (num_layers, num_real_sequences, hidden_size)
             ci_current = ci[:, current_mask, :]  # (num_layers, num_real_sequences, hidden_size)
@@ -169,13 +155,12 @@ class VLSLSTM(nn.Module):
 
             # Lưu output vào tensor output_seq
             temp_output = torch.zeros(batch_size, 1, hidden_size, device=output.device, dtype=output.dtype)
-            temp_output[current_mask] = output  # Ghi output của các chuỗi thực
+            temp_output[current_mask] = output  # Ghi output của các chuỗi thực # chỉ những chuỗi có mask = 1 mới được gán giá trị, còn lại vẫn giữ nguyên giá trị 0
             # Cập nhật đầu vào cho bước tiếp theo
             lstm_input = temp_output[:, -1:, :]  # Sử dụng output hiện tại làm input tiếp theo
             # output_seq.append(temp_output[current_mask])  # Thêm vào danh sách output
             output_seq[:, t:t+1, :] = temp_output
         
-        # print('check output_seq shape: ', output_seq.shape)
         # filter padding and save to a list
         output_seq_final = [output_seq[i, :lengths_aureg[i], :] for i in range(batch_size)]
 
@@ -436,7 +421,7 @@ class NAEDynamicLSTM():
                         # Backward pass
                         self.optimizer.zero_grad()
                         try:
-                            loss_mean.backward()        # Lần 1.5 lỗi ở đây
+                            loss_mean.backward()        
                             for name, param in self.encoder.named_parameters():
                                 if param.grad is not None:
                                     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
