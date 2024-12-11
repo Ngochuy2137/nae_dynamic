@@ -1,15 +1,7 @@
 from nae_core.evaluation.NAE_metrics.metric import *
 
-'''
-We will examine how the accumulated error changes with increasing input length
-The input_seqs length is increased by 1 data point each time
-The input_seqs includes input seqs with increasing length
-(We will get mean accumulated error for each input length)
-'''
-
-
 def main():
-    metric = MetricAccumulatedError()
+    metric = MetricGoalError()
     device = torch.device('cuda')
     seed = 42
     torch.manual_seed(seed)
@@ -19,7 +11,7 @@ def main():
     # --- Data and model ---
     id_traj = 'last 70 frames'
     filter_key = 'len_left'
-    filter_value = 'accumulated_error'
+    filter_value = 'goal_error'
 
     # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_prediction_ws/src/nae/data/rllab_dataset_no_orientation/data_enrichment/big_plane/big_plane_enrich_for_training'
     # thrown_object = 'big_plane'
@@ -71,7 +63,6 @@ def main():
     metric.process_and_plot(input_seqs=input_seqs, predicted_seqs=predicted_seqs, label_seqs=label_seqs, 
                             thrown_object=thrown_object, id_traj=id_traj, 
                             filter_key=filter_key, filter_value=filter_value)
-    
     
 
 if __name__ == '__main__':

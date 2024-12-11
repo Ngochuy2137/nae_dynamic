@@ -1,6 +1,7 @@
 from nae_core.nae_dynamic import NAEDynamicLSTM
 from nae_core.utils.submodules.training_utils.data_loader import DataLoader as NAEDataLoader
 from nae_core.utils.submodules.training_utils.input_label_generator import InputLabelGenerator
+from .metric import Metric
 
 from python_utils.plotter import Plotter
 from python_utils.printer import Printer
@@ -10,12 +11,12 @@ import torch
 import random
 
 
-class MetricAccumulatedError:
+class MetricAccumulatedError(Metric):
     def __init__(self):
         self.util_printer = Printer()
         self.util_plotter = Plotter()
         
-    def accumulated_error_cal(self, input_seqs, label_seqs, predicted_seqs):
+    def compute(self, input_seqs, label_seqs, predicted_seqs):
         '''
         We will examine how the accumulated error changes with increasing input length
         The input data length is increased by 1 data point each time
@@ -50,22 +51,11 @@ class MetricAccumulatedError:
 
             err_by_inlen = {
                 'input_len': len(inp),
+                'len_left': len(lab) - len(inp),
                 'accumulated_error': accumulated_error
             }
             accumulated_error_by_input_length.append(err_by_inlen) 
         return accumulated_error_by_input_length
-    
-    def is_proper_prediction(self, input_data, label_seqs):
-        # We determine based on the input data and the label data
-        for in_check, la_check in zip(input_data, label_seqs):
-            in_check_cut = np.array(in_check[1:])
-            la_check_cut = np.array(la_check[:in_check_cut.shape[0]])
-            same = np.allclose(in_check_cut, la_check_cut)
-            if not same:
-                self.util_printer.print_red(f'{len(input_data)} labels are incorrect', background=True)
-                self.util_plotter.plot_predictions([in_check], [la_check], lim_plot_num=None, rotate_data_whose_y_up=False, title=f'{same}')
-                return False
-        return True
     
 
 
@@ -137,7 +127,7 @@ def main():
         
 
         # Calculate accumulated error for one trajectory
-        accumulated_err = metric.accumulated_error_cal(input_data, label_seqs, predicted_seqs, thrown_object, id, plot=False)
+        accumulated_err = metric.compute(input_data, label_seqs, predicted_seqs, thrown_object, id, plot=False)
         if accumulated_err == None:
             metric.util_printer.print_red(f'Error in accumulated error calculation', background=True)
             return
