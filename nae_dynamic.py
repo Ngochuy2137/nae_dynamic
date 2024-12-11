@@ -245,7 +245,10 @@ class NAEDynamicLSTM():
         self.data_dir = data_dir
 
         self.run_name = f"NAE_DYNAMIC-model_{datetime.now().strftime('%d-%m-%Y_%H-%M-%S')}_hiddensize{hidden_size}"
-        self.model_dir = os.path.join('models', self.thrown_object, self.run_name)
+
+        # get dir of folder including this script
+        cur_dir = os.path.dirname(os.path.realpath(__file__))
+        self.model_dir = os.path.join(cur_dir, 'models', self.thrown_object, self.run_name)
 
         # Initialize model, loss, optimizer
         self.encoder = Encoder(input_size, hidden_size).to(device)
@@ -323,6 +326,10 @@ class NAEDynamicLSTM():
     
     def train(self, data_train, data_val, checkpoint_path=None, enable_wandb=False, test_anomaly=False, test_cuda_blocking=False, logging_level=logging.WARNING):
         self._init_logging(logging_level, test_anomaly, test_cuda_blocking)
+        if checkpoint_path:
+            start_epoch = self.load_checkpoint(checkpoint_path) + 1
+        else:
+            start_epoch = 0
         try:
 
             # For debugging
@@ -337,7 +344,7 @@ class NAEDynamicLSTM():
             start_t = time.time()
             dataloader_train = TorchDataLoader(data_train, batch_size=self.batch_size_train, collate_fn=lambda x: self.collate_pad_fn(x), shuffle=True)
 
-            for epoch in range(self.num_epochs):
+            for epoch in range(start_epoch, self.num_epochs):
                 self.encoder.train()
                 self.vls_lstm.train()
                 self.decoder.train()
@@ -572,6 +579,16 @@ class NAEDynamicLSTM():
             }
         )
         self.wandb_run_url = wandb.run.url
+    
+    def load_checkpoint(self, checkpoint_path):
+        checkpoint = torch.load(checkpoint_path)
+        self.encoder.load_state_dict(checkpoint['encoder_state_dict'])
+        self.vls_lstm.load_state_dict(checkpoint['model_state_dict'])
+        self.decoder.load_state_dict(checkpoint['decoder_state_dict'])
+        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        epoch = checkpoint['epoch']
+        # loss = checkpoint['loss']
+        return epoch
     
     def save_model(self, epoch, data_num, start_t, loss_all_data):    
         epoch_num_midway = epoch
