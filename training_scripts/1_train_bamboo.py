@@ -1,6 +1,6 @@
-from nae_dynamic import *
-from utils.submodules.training_utils.data_loader import DataLoader as NAEDataLoader
-from utils.submodules.training_utils.input_label_generator import InputLabelGenerator
+from nae_core.nae_dynamic import *
+from nae_core.utils.submodules.training_utils.data_loader import DataLoader as NAEDataLoader
+from nae_core.utils.submodules.training_utils.input_label_generator import InputLabelGenerator
 import random
 
 def main():
@@ -64,7 +64,9 @@ def main():
     wdb_notes = f'NAE_DYNAMIC - {model_params["num_layers_lstm"]} LSTM layers, {model_params["hidden_size"]} hidden size, lr={model_params["lr"]}, batch_size={training_params["batch_size_train"]}'
     if enable_wandb:
         nae.init_wandb('nae-dynamic', run_id=wdb_run_id, resume=wdb_resume, wdb_notes=wdb_notes)
-    saved_model_dir = nae.train(data_train, data_val, checkpoint_path=checkout_path, enable_wandb=enable_wandb)
+    saved_model_dir = nae.train(data_train, data_val, checkpoint_path=checkout_path, enable_wandb=enable_wandb, 
+                                test_anomaly=False, 
+                                test_cuda_blocking=False)
 
 if __name__ == '__main__':
     main()
