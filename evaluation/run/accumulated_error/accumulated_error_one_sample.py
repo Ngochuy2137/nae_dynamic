@@ -1,4 +1,4 @@
-from nae_core.evaluation.NAE_metrics.accumulated_error_metric import *
+from nae_core.evaluation.NAE_metrics.metric import *
 
 '''
 We will examine how the accumulated error changes with increasing input length
@@ -63,7 +63,9 @@ def main():
         # Inference
         predicted_seqs, label_seqs = nae.validate_and_score(data=data_test, batch_size=1024, shuffle=False, inference=True)
 
-        print(f'There {len(predicted_seqs)} groups of input-label-prediction sequences')
+        print('\n---------------------------------------------------')
+        print('Considering trajectory: ', id_traj)
+        print(f'    There {len(predicted_seqs)} groups of input-label-prediction sequences')
 
         input_data = [inp[0] for inp in data_test]
         # convert all elements of input_data to numpy
@@ -72,12 +74,12 @@ def main():
         
 
         # 1. Calculate accumulated error for one trajectory
-        accumulated_err = metric.accumulated_error_cal(input_data, label_seqs, predicted_seqs)
+        accumulated_err = metric.compute(input_data, label_seqs, predicted_seqs)
         if accumulated_err == None:
-            metric.util_printer.print_red(f'Error in accumulated error calculation', background=True)
+            metric.util_printer.print_red(f'Error in metric calculation', background=True)
             return
         
-        plot = input('Do you want to check next trajectory? y/n')
+        plot = input('    Do you want to plot [y/n] ? ')
         # 2. Plot
         if plot=='y':
             # 2.1 Show line chart of change in accumulated error with increasing input length
@@ -101,7 +103,7 @@ def main():
                                                         show_all_as_default=False)
     
         
-        input('Do you want to check next trajectory?')
+        input('    Do you want to check next trajectory [y/n] ? ')
 
 if __name__ == '__main__':
     main()
