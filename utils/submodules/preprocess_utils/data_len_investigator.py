@@ -46,6 +46,29 @@ class RoCatRLLabDataRawInvestigator:
         plt.grid(axis='y', alpha=0.75)
         plt.show()
 
+    def plot_histogram_data_len(self, data):
+        'plot 2D histogram of data length'
+        data_len = [len(trajectory) for trajectory in data]
+        # Tạo histogram
+        plt.figure(figsize=(15, 6))
+        counts, bins, patches = plt.hist(data_len, bins=range(0, max(data_len) + 5, 5), 
+                                        alpha=0.7, edgecolor='black', color='skyblue')
+        # Tùy chỉnh trục X
+        plt.xticks(np.arange(0, max(data_len) + 5, 5))
+        # Thêm số lượng (frequency) lên mỗi bar
+        for count, x in zip(counts, bins):
+            if count > 0:  # Chỉ ghi số trên các cột có dữ liệu
+                plt.text(x + 2.5, count + 0.5, str(int(count)), ha='center', fontsize=12, color='red')
+
+        # Tùy chỉnh tiêu đề và nhãn
+        plt.title("Histogram of Data Length Distribution", fontsize=16)
+        plt.xlabel("Data Length", fontsize=14)
+        plt.ylabel("Frequency", fontsize=14)
+
+        # Hiển thị biểu đồ
+        plt.grid(axis='y', alpha=0.75)
+        plt.show()
+
 class RoCatNAEDataRawInvestigator:
     def __init__(self,):
         self.util_printer = Printer()

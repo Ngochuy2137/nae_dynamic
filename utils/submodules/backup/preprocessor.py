@@ -1,5 +1,5 @@
 import numpy as np
-from utils.submodules.data_loader import DataLoader as NAEDataLoader
+from nae_core.utils.submodules.training_utils.data_loader import DataLoader as NAEDataLoader
 import os
 from datetime import datetime
 

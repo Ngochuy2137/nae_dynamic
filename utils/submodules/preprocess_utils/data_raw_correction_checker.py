@@ -12,7 +12,7 @@ import random
 from python_utils.printer import Printer
 DEBUG = False
 np.set_printoptions(suppress=True)
-from utils.submodules.preprocess_utils.data_raw_reader import RoCatRLLabDataRawReader
+from nae_core.utils.submodules.preprocess_utils.data_raw_reader import RoCatRLLabDataRawReader
 
 class RoCatRLDataRawCorrectionChecker:
     def __init__(self,):
