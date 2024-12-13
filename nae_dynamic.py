@@ -407,6 +407,8 @@ class NAEDynamicLSTM():
                             loss_3_mean = 0
                             if mask_reconstruction.sum() != 0:
                                 loss_3_mean = loss_3_mask.sum() / mask_reconstruction.sum()
+                            
+                            loss_mean = loss_1_mean + loss_2_mean + loss_3_mean
 
                             if torch.isnan(loss_1_mean) or torch.isinf(loss_1_mean):
                                 print(f"loss_1_mean contains NaN or Infinity: {loss_1_mean}")
@@ -438,8 +440,6 @@ class NAEDynamicLSTM():
                             except AssertionError as e:
                                 logging.error(f"Epoch {epoch} - loss_3_mean is detached: {loss_3_mean}")
                                 raise e
-
-                            loss_mean = loss_1_mean + loss_2_mean + loss_3_mean
 
                             if torch.isnan(loss_mean) or torch.isinf(loss_mean):
                                 print(f"loss_mean contains NaN or Infinity: {loss_mean}")
@@ -544,7 +544,11 @@ class NAEDynamicLSTM():
                     )
 
                 if (epoch) % 1 == 0:
-                    self.util_printer.print_green(f'Epoch [{epoch}/{self.num_epochs}], Loss: {loss_total_train_log:.6f}, traing time: {traing_time:.2f} s ({traing_time/(traing_time+validate_time)*100} %), validate time: {validate_time:.2f} s ({validate_time/(traing_time+validate_time)*100} %), learning rate: {self.optimizer.param_groups[0]["lr"]}', background=False)
+                    self.util_printer.print_green(f'Epoch [{epoch}/{self.num_epochs}]', background=False)
+                    print(f'    Training speed: {(traing_time+validate_time)/(epoch+1):.3f} s/epoch')
+                    print(f'    Training time left: {(self.num_epochs - (epoch+1)) * (traing_time+validate_time)/(epoch+1)/60:.2f} mins')
+                    print(f'    Loss: {loss_total_train_log:.6f}')
+                    print(f'    learning rate: {self.optimizer.param_groups[0]["lr"]}')
                     print('\n-----------------------------------')
                 self.scheduler.step()
 
@@ -686,13 +690,6 @@ class NAEDynamicLSTM():
                 (labels_teafo_pad, lengths_teafo, mask_teafo), \
                 (labels_aureg_pad, lengths_aureg, mask_aureg),\
                 (labels_reconstruction_pad, lengths_reconstruction, mask_reconstruction) = batch
-
-                # print('CHECK 2: ', len(inputs_pad[0]), ' ', len(inputs_pad[1]), ' ', len(inputs_pad[2]), ' ', len(inputs_pad[3]))
-                # input()
-
-                # lengths_teafo= torch.tensor(lengths_teafo, dtype=torch.int64)
-                # lengths_aureg= torch.tensor(lengths_aureg, dtype=torch.int64)
-                # lengths_reconstruction= torch.tensor(lengths_reconstruction, dtype=torch.int64)
 
                 # Predict
                 inputs_lstm = self.encoder(inputs_pad)
