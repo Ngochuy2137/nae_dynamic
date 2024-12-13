@@ -21,10 +21,11 @@ def main():
     # Training parameters 
     training_params = {
         'num_epochs': 5000,
-        'batch_size_train': 256,    
+        'batch_size_train': 512,    
         'batch_size_val': 1024,
         'save_interval': 10,
-        'thrown_object' : thrown_object + '-dynamic-len'
+        'thrown_object' : thrown_object + '-dynamic-len',
+        'warmup_steps': 25
     }
     # Model parameters
     model_params = {

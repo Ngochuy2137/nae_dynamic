@@ -10,8 +10,8 @@ def main():
     np.random.seed(seed)
     random.seed(seed)
 
-    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/nae_paper_dataset/new_data_format/green/split/green'
-    thrown_object = 'green'
+    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/nae_paper_dataset/new_data_format/paige/split/paige'
+    thrown_object = 'paige'
     
     checkout_path = None
     wdb_run_id=None   # 't5nlloi0'
@@ -24,8 +24,7 @@ def main():
         'batch_size_train': 256,    
         'batch_size_val': 1024,
         'save_interval': 10,
-        'thrown_object' : thrown_object + '-dynamic-len',
-        'warmup_steps': 25
+        'thrown_object' : thrown_object + '-dynamic-len'
     }
     # Model parameters
     model_params = {
