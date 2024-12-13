@@ -1,6 +1,7 @@
 # ignore all folder with name wandb in subfolders and all its contents
 **/wandb/
 **/models/
+**/backup/
 # except models with name starting with @
 !**/models/**/@*/
 !**/models/**/@*/**
@@ -18,3 +19,4 @@
 *.egg-info/
 *.zip
 *.log
+*.html
