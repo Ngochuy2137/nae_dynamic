@@ -337,7 +337,7 @@ class NAEDynamicLSTM():
         )
     
     def train(self, data_train, data_val, checkpoint_path=None, enable_wandb=False, test_anomaly=False, test_cuda_blocking=False, logging_level=logging.WARNING, debug=False):
-        self._init_logging(logging_level, test_anomaly, test_cuda_blocking)
+        # self._init_logging(logging_level, test_anomaly, test_cuda_blocking)
         if checkpoint_path:
             start_epoch = self.load_checkpoint(checkpoint_path) + 1
         else:
@@ -346,10 +346,10 @@ class NAEDynamicLSTM():
 
             # For debugging
             if test_anomaly:
-                logging.info("Testing torch.autograd.set_detect_anomaly(True)")
+                # logging.info("Testing torch.autograd.set_detect_anomaly(True)") if debug else None
                 torch.autograd.set_detect_anomaly(True)
             if test_cuda_blocking:
-                logging.info("Testing CUDA_LAUNCH_BLOCKING")
+                # logging.info("Testing CUDA_LAUNCH_BLOCKING") if debug else None
                 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
             # Khởi tạo thời gian bắt đầu
@@ -368,13 +368,14 @@ class NAEDynamicLSTM():
                 loss_3_train_log = 0.0
                 loss_all_log = []
 
-                logging.info(f"\n\n====================     EPOCH {epoch}     ====================")                
+                # logging.info(f"\n\n====================     EPOCH {epoch}     ====================")        
                 batch_idx = 0
                 for batch in dataloader_train:
+                    time_batch_start = time.time()
                     batch_idx += 1
-                    logging.info(f"\nBatch {batch_idx}:")
+                    # logging.info(f"\nBatch {batch_idx}:") if debug else None
                     try:
-                        logging.info(f"TRAINING:")
+                        # logging.info(f"TRAINING:") if debug else None
                         (inputs_pad, lengths_in, mask_in), \
                         (labels_teafo_pad, lengths_teafo, mask_teafo), \
                         (labels_aureg_pad, lengths_aureg, mask_aureg),\
@@ -411,38 +412,38 @@ class NAEDynamicLSTM():
                         if debug:
                             if torch.isnan(loss_1_mean) or torch.isinf(loss_1_mean):
                                 print(f"loss_1_mean contains NaN or Infinity: {loss_1_mean}")
-                                logging.error(f"Epoch {epoch} - loss_1_mean contains NaN or Infinity: {loss_1_mean}")
+                                # logging.error(f"Epoch {epoch} - loss_1_mean contains NaN or Infinity: {loss_1_mean}")
 
                             # Kiểm tra loss_2_mean
                             if torch.isnan(loss_2_mean) or torch.isinf(loss_2_mean):
                                 print(f"loss_2_mean contains NaN or Infinity: {loss_2_mean}")
-                                logging.error(f"Epoch {epoch} - loss_2_mean contains NaN or Infinity: {loss_2_mean}")
+                                # logging.error(f"Epoch {epoch} - loss_2_mean contains NaN or Infinity: {loss_2_mean}")
 
                             # Kiểm tra loss_3_mean
                             if torch.isnan(loss_3_mean) or torch.isinf(loss_3_mean):
                                 print(f"loss_3_mean contains NaN or Infinity: {loss_3_mean}")
-                                logging.error(f"Epoch {epoch} - loss_3_mean contains NaN or Infinity: {loss_3_mean}")
+                                # logging.error(f"Epoch {epoch} - loss_3_mean contains NaN or Infinity: {loss_3_mean}")
 
                             # Kiểm tra kết nối với đồ thị tính toán
                             try:
                                 assert loss_1_mean.requires_grad, "loss_1_mean is detached from the computation graph"
                             except AssertionError as e:
-                                logging.error(f"Epoch {epoch} - loss_1_mean is detached: {loss_1_mean}")
+                                # logging.error(f"Epoch {epoch} - loss_1_mean is detached: {loss_1_mean}")
                                 raise e
                             try:
                                 assert loss_2_mean.requires_grad, "loss_2_mean is detached from the computation graph"
                             except AssertionError as e:
-                                logging.error(f"Epoch {epoch} - loss_2_mean is detached: {loss_2_mean}")
+                                # logging.error(f"Epoch {epoch} - loss_2_mean is detached: {loss_2_mean}")
                                 raise e
                             try:
                                 assert loss_3_mean.requires_grad, "loss_3_mean is detached from the computation graph"
                             except AssertionError as e:
-                                logging.error(f"Epoch {epoch} - loss_3_mean is detached: {loss_3_mean}")
+                                # logging.error(f"Epoch {epoch} - loss_3_mean is detached: {loss_3_mean}")
                                 raise e
 
                             if torch.isnan(loss_mean) or torch.isinf(loss_mean):
                                 print(f"loss_mean contains NaN or Infinity: {loss_mean}")
-                                logging.error(f"Epoch {epoch} - loss_mean contains NaN or Infinity: {loss_mean}")
+                                # logging.error(f"Epoch {epoch} - loss_mean contains NaN or Infinity: {loss_mean}")
                                 raise ValueError("NaN detected in loss!")
 
                         # Backward pass
@@ -453,26 +454,26 @@ class NAEDynamicLSTM():
                                 if param.grad is not None:
                                     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
                                         print(f"Epoch {epoch} -     ENCODER: Gradient for {name} contains NaN or Infinity before backward!")
-                                        logging.error(f"Epoch {epoch} -     ENCODER: Gradient for {name} contains NaN or Infinity before backward!")
+                                        # logging.error(f"Epoch {epoch} -     ENCODER: Gradient for {name} contains NaN or Infinity before backward!")
                             for name, param in self.vls_lstm.named_parameters():
                                 if param.grad is not None:
                                     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
                                         print(f"Epoch {epoch} -     VLS_LSTM: Gradient for {name} contains NaN or Infinity before backward!")
-                                        logging.error(f"Epoch {epoch} -     VLS_LSTM: Gradient for {name} contains NaN or Infinity before backward!")
+                                        # logging.error(f"Epoch {epoch} -     VLS_LSTM: Gradient for {name} contains NaN or Infinity before backward!")
                                 
                             for name, param in self.decoder.named_parameters():
                                 if param.grad is not None:
                                     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
                                         print(f"Epoch {epoch} -     DECODER: Gradient for {name} contains NaN or Infinity before backward!")
-                                        logging.error(f"Epoch {epoch} -     DECODER: Gradient for {name} contains NaN or Infinity before backward!")
+                                        # logging.error(f"Epoch {epoch} -     DECODER: Gradient for {name} contains NaN or Infinity before backward!")
                                 
                         try:
                             loss_mean.backward()
                         except RuntimeError as e:
-                            logging.error(f"Epoch {epoch} -      RuntimeError during backward pass!")
-                            logging.error(f"Epoch {epoch} -          Error message: %s", str(e))
-                            logging.error(f"Epoch {epoch} -          Stack trace:")
-                            logging.error(traceback.format_exc())  # Ghi lại toàn bộ stack trace
+                            # logging.error(f"Epoch {epoch} -      RuntimeError during backward pass!") if debug else None
+                            # logging.error(f"Epoch {epoch} -          Error message: %s", str(e)) if debug else None
+                            # logging.error(f"Epoch {epoch} -          Stack trace:") if debug else None
+                            # logging.error(traceback.format_exc()) if debug else None  # Ghi lại toàn bộ stack trace
                             raise e
 
                         self.optimizer.step()
@@ -484,10 +485,10 @@ class NAEDynamicLSTM():
                         loss_3_train_log += loss_3_mean.item()
 
                     except RuntimeError as e:
-                        logging.error(f"Epoch {epoch} -      RuntimeError during training!")
-                        logging.error(f"Epoch {epoch} -          Error message: %s", str(e))
-                        logging.error(f"Epoch {epoch} -          Stack trace:")
-                        logging.error(traceback.format_exc())  # Log stack trace đầy đủ
+                        # logging.error(f"Epoch {epoch} -      RuntimeError during training!") if debug else None
+                        # logging.error(f"Epoch {epoch} -          Error message: %s", str(e)) if debug else None
+                        # logging.error(f"Epoch {epoch} -          Stack trace:") if debug else None
+                        # logging.error(traceback.format_exc()) if debug else None  # Log stack trace đầy đủ
                         sys.stderr.flush()
                         log_resources(epoch)
                         raise e
@@ -508,16 +509,16 @@ class NAEDynamicLSTM():
 
                 # 2. ----- FOR VALIDATION -----
                 try:
-                    logging.info(f"VALIDATION:")
+                    # logging.info(f"VALIDATION:")
                     mean_loss_total_val_log, \
                     mean_ade_entire, mean_ade_future, \
                     mean_nade_entire, mean_nade_future, \
                     mean_final_step_err, capture_success_rate = self.validate_and_score(data=data_val, batch_size=self.batch_size_val, shuffle=False, epoch=epoch)
                 except RuntimeError as e:
-                    logging.error("Epoch {epoch} - VAL      RuntimeError during validation!")
-                    logging.error("Epoch {epoch} - VAL      Error message: %s", str(e))
-                    logging.error("Epoch {epoch} - VAL      Stack trace:")
-                    logging.error(traceback.format_exc())
+                    # logging.error("Epoch {epoch} - VAL      RuntimeError during validation!") if debug else None
+                    # logging.error("Epoch {epoch} - VAL      Error message: %s", str(e)) if debug else None
+                    # logging.error("Epoch {epoch} - VAL      Stack trace:") if debug else None
+                    # logging.error(traceback.format_exc()) if debug else None
                     raise e
                 
                 torch.cuda.empty_cache()
@@ -554,10 +555,11 @@ class NAEDynamicLSTM():
                 self.scheduler.step()
 
         finally:
-            if sys.stdout:
-                sys.stderr.flush()
-            if sys.stderr:
-                sys.stderr.flush()
+            if debug:
+                if sys.stdout:
+                    sys.stderr.flush()
+                if sys.stderr:
+                    sys.stderr.flush()
 
         final_model_dir = self.save_model(epoch, len(data_train), start_t, loss_all_log)
 
@@ -730,23 +732,23 @@ class NAEDynamicLSTM():
 
                 if torch.isnan(loss_1_mean) or torch.isinf(loss_1_mean):
                     print("loss_1_mean contains NaN or Infinity!")
-                    logging.error(f"Epoch {epoch} - loss_1_mean contains NaN or Infinity!")
+                    # logging.error(f"Epoch {epoch} - loss_1_mean contains NaN or Infinity!") if debug else None
 
                 # Kiểm tra loss_2_mean
                 if torch.isnan(loss_2_mean) or torch.isinf(loss_2_mean):
                     print("loss_2_mean contains NaN or Infinity!")
-                    logging.error(f"Epoch {epoch} - loss_2_mean contains NaN or Infinity!")
+                    # logging.error(f"Epoch {epoch} - loss_2_mean contains NaN or Infinity!") if debug else None
 
                 # Kiểm tra loss_3_mean
                 if torch.isnan(loss_3_mean) or torch.isinf(loss_3_mean):
                     print("loss_3_mean contains NaN or Infinity!")
-                    logging.error(f"Epoch {epoch} - loss_3_mean contains NaN or Infinity!")
+                    # logging.error(f"Epoch {epoch} - loss_3_mean contains NaN or Infinity!") if debug else None
                     
                 loss_mean = loss_1_mean + loss_2_mean + loss_3_mean
 
                 # Kiểm tra NaN
                 if torch.isnan(loss_mean):
-                    logging.error(f"Epoch {epoch} -      Loss contains NaN!")
+                    # logging.error(f"Epoch {epoch} -      Loss contains NaN!") if debug else None
                     raise ValueError("     NaN detected in loss!")
                 loss_total_log += loss_mean.item()
 
