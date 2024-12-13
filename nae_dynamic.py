@@ -243,7 +243,26 @@ class NAEDynamicLSTM():
         self.decoder = Decoder(hidden_size, output_size).to(device)
 
         self.criterion = nn.MSELoss(reduction='none').to(device)  # NOTE: Reduction 'none' to apply masking, default is 'mean'
-        self.optimizer = optim.Adam(list(self.encoder.parameters()) + list(self.vls_lstm.parameters()) + list(self.decoder.parameters()), lr=lr)        
+        # self.optimizer = optim.Adam(list(self.encoder.parameters()) + list(self.vls_lstm.parameters()) + list(self.decoder.parameters()), lr=lr)
+        
+        weight_decay = 1e-4
+        # Định nghĩa các tham số không áp dụng Weight Decay (bias, LayerNorm.weight)
+        no_decay = ['bias', 'LayerNorm.weight']
+        # Tách các tham số
+        params = [
+            # Các tham số có áp dụng Weight Decay
+            {'params': [p for n, p in self.encoder.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': weight_decay},
+            {'params': [p for n, p in self.vls_lstm.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': weight_decay},
+            {'params': [p for n, p in self.decoder.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': weight_decay},
+
+            # Các tham số không áp dụng Weight Decay
+            {'params': [p for n, p in self.encoder.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0},
+            {'params': [p for n, p in self.vls_lstm.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0},
+            {'params': [p for n, p in self.decoder.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0},
+        ]
+        # Sử dụng AdamW với các nhóm tham số đã tách
+        self.optimizer = optim.AdamW(params, lr=lr)
+        
         self.scheduler = LambdaLR(self.optimizer, lr_lambda=self.warmup_lr_scheduler)
 
         self.util_printer = Printer()
