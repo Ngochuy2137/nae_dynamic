@@ -25,7 +25,7 @@ import psutil  # Thư viện để theo dõi CPU, RAM
 from datetime import datetime
 import sys
 import traceback
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 
 def log_resources(epoch):
     """Ghi log thông tin tài nguyên hệ thống."""
@@ -309,17 +309,6 @@ class NAEDynamicLSTM():
         mask_aureg = torch.arange(max(lengths_aureg)).expand(len(lengths_aureg), max(lengths_aureg)) < lengths_aureg.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
         mask_reconstruction = torch.arange(max(lengths_reconstruction)).expand(len(lengths_reconstruction), max(lengths_reconstruction)) < lengths_reconstruction.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
 
-        # mask_in = torch.arange(max(lengths_in)).unsqueeze(0) < torch.tensor(lengths_in).unsqueeze(1)
-        # mask_teafo = torch.arange(max(lengths_teafo)).unsqueeze(0) < torch.tensor(lengths_teafo).unsqueeze(1)
-        # mask_aureg = torch.arange(max(lengths_aureg)).unsqueeze(0) < torch.tensor(lengths_aureg).unsqueeze(1)
-        # mask_reconstruction = torch.arange(max(lengths_reconstruction)).unsqueeze(0) < torch.tensor(lengths_reconstruction).unsqueeze(1)
-
-        # move to device
-        # lengths_in = lengths_in.to(self.device)
-        # lengths_teafo = lengths_teafo.to(self.device)
-        # lengths_aureg = lengths_aureg.to(self.device)
-        # lengths_reconstruction = lengths_reconstruction.to(self.device)
-
         inputs_pad = inputs_pad.to(self.device).float()
         labels_teafo_pad = labels_teafo_pad.to(self.device)
         labels_aureg_pad = labels_aureg_pad.to(self.device)
@@ -339,6 +328,7 @@ class NAEDynamicLSTM():
     
     def train(self, data_train, data_val, checkpoint_path=None, enable_wandb=False, test_anomaly=False, test_cuda_blocking=False, logging_level=logging.WARNING, debug=False):
         # self._init_logging(logging_level, test_anomaly, test_cuda_blocking)
+        scaler = GradScaler()
         if checkpoint_path:
             start_epoch = self.load_checkpoint(checkpoint_path) + 1
         else:
@@ -384,110 +374,53 @@ class NAEDynamicLSTM():
                         (labels_reconstruction_pad, lengths_reconstruction, mask_reconstruction) = batch
 
                         time_flag_1 = time.time() # load data time
+                        with autocast(device_type='cuda'):
+                            inputs_lstm = self.encoder(inputs_pad)
+                            outputs_teafo_pad, output_aureg_pad = self.vls_lstm(inputs_lstm, lengths_teafo, lengths_aureg, mask_aureg)
+                            output_teafo_pad_de = self.decoder(outputs_teafo_pad)
+                            output_aureg_pad_de = self.decoder(output_aureg_pad)
+                            
+                            time_flag_2 = time.time() # forward pass time
 
-                        inputs_lstm = self.encoder(inputs_pad)
-                        outputs_teafo_pad, output_aureg_pad = self.vls_lstm(inputs_lstm, lengths_teafo, lengths_aureg, mask_aureg)
-                        output_teafo_pad_de = self.decoder(outputs_teafo_pad)
-                        output_aureg_pad_de = self.decoder(output_aureg_pad)
+                            ##  ----- LOSS 1: TEACHER FORCING -----
+                            loss_1 = self.criterion(output_teafo_pad_de, labels_teafo_pad).sum(dim=-1)  # Shape: (batch_size, max_seq_len_out)
+                            # Tạo mask dựa trên chiều dài thực
+                            loss_1_mask = loss_1 * mask_teafo  # Masked loss
+                            loss_1_mean = 0
+                            if mask_teafo.sum() != 0:
+                                loss_1_mean = loss_1_mask.sum() / mask_teafo.sum()
 
-                        time_flag_2 = time.time() # forward pass time
+                            ## ----- LOSS 2: AUTOREGRESSIVE -----
+                            loss_2 = self.criterion(output_aureg_pad_de, labels_aureg_pad).sum(dim=-1)
+                            loss_2_mask = loss_2 * mask_aureg
+                            loss_2_mean = 0
+                            if mask_aureg.sum() != 0:
+                                loss_2_mean = loss_2_mask.sum() / mask_aureg.sum()
 
-                        ##  ----- LOSS 1: TEACHER FORCING -----
-                        loss_1 = self.criterion(output_teafo_pad_de, labels_teafo_pad).sum(dim=-1)  # Shape: (batch_size, max_seq_len_out)
-                        # Tạo mask dựa trên chiều dài thực
-                        loss_1_mask = loss_1 * mask_teafo  # Masked loss
-                        loss_1_mean = 0
-                        if mask_teafo.sum() != 0:
-                            loss_1_mean = loss_1_mask.sum() / mask_teafo.sum()
+                            ## ----- LOSS 3: RECONSTRUCTION -----
+                            loss_3 = self.criterion(self.decoder(inputs_lstm), labels_reconstruction_pad).sum(dim=-1)
+                            loss_3_mask = loss_3 * mask_reconstruction
+                            loss_3_mean = 0
+                            if mask_reconstruction.sum() != 0:
+                                loss_3_mean = loss_3_mask.sum() / mask_reconstruction.sum()
+                            
+                            loss_mean = loss_1_mean + loss_2_mean + loss_3_mean
 
-                        ## ----- LOSS 2: AUTOREGRESSIVE -----
-                        loss_2 = self.criterion(output_aureg_pad_de, labels_aureg_pad).sum(dim=-1)
-                        loss_2_mask = loss_2 * mask_aureg
-                        loss_2_mean = 0
-                        if mask_aureg.sum() != 0:
-                            loss_2_mean = loss_2_mask.sum() / mask_aureg.sum()
-
-                        ## ----- LOSS 3: RECONSTRUCTION -----
-                        loss_3 = self.criterion(self.decoder(inputs_lstm), labels_reconstruction_pad).sum(dim=-1)
-                        loss_3_mask = loss_3 * mask_reconstruction
-                        loss_3_mean = 0
-                        if mask_reconstruction.sum() != 0:
-                            loss_3_mean = loss_3_mask.sum() / mask_reconstruction.sum()
-                        
-                        loss_mean = loss_1_mean + loss_2_mean + loss_3_mean
-
-                        time_flag_3 = time.time() # loss cal time
-
-                        if debug:
-                            if torch.isnan(loss_1_mean) or torch.isinf(loss_1_mean):
-                                print(f"loss_1_mean contains NaN or Infinity: {loss_1_mean}")
-                                # logging.error(f"Epoch {epoch} - loss_1_mean contains NaN or Infinity: {loss_1_mean}")
-
-                            # Kiểm tra loss_2_mean
-                            if torch.isnan(loss_2_mean) or torch.isinf(loss_2_mean):
-                                print(f"loss_2_mean contains NaN or Infinity: {loss_2_mean}")
-                                # logging.error(f"Epoch {epoch} - loss_2_mean contains NaN or Infinity: {loss_2_mean}")
-
-                            # Kiểm tra loss_3_mean
-                            if torch.isnan(loss_3_mean) or torch.isinf(loss_3_mean):
-                                print(f"loss_3_mean contains NaN or Infinity: {loss_3_mean}")
-                                # logging.error(f"Epoch {epoch} - loss_3_mean contains NaN or Infinity: {loss_3_mean}")
-
-                            # Kiểm tra kết nối với đồ thị tính toán
-                            try:
-                                assert loss_1_mean.requires_grad, "loss_1_mean is detached from the computation graph"
-                            except AssertionError as e:
-                                # logging.error(f"Epoch {epoch} - loss_1_mean is detached: {loss_1_mean}")
-                                raise e
-                            try:
-                                assert loss_2_mean.requires_grad, "loss_2_mean is detached from the computation graph"
-                            except AssertionError as e:
-                                # logging.error(f"Epoch {epoch} - loss_2_mean is detached: {loss_2_mean}")
-                                raise e
-                            try:
-                                assert loss_3_mean.requires_grad, "loss_3_mean is detached from the computation graph"
-                            except AssertionError as e:
-                                # logging.error(f"Epoch {epoch} - loss_3_mean is detached: {loss_3_mean}")
-                                raise e
-
-                            if torch.isnan(loss_mean) or torch.isinf(loss_mean):
-                                print(f"loss_mean contains NaN or Infinity: {loss_mean}")
-                                # logging.error(f"Epoch {epoch} - loss_mean contains NaN or Infinity: {loss_mean}")
-                                raise ValueError("NaN detected in loss!")
+                            time_flag_3 = time.time() # loss cal time
 
                         # Backward pass
                         self.optimizer.zero_grad()
                                                 
-                        if debug:
-                            for name, param in self.encoder.named_parameters():
-                                if param.grad is not None:
-                                    if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
-                                        print(f"Epoch {epoch} -     ENCODER: Gradient for {name} contains NaN or Infinity before backward!")
-                                        # logging.error(f"Epoch {epoch} -     ENCODER: Gradient for {name} contains NaN or Infinity before backward!")
-                            for name, param in self.vls_lstm.named_parameters():
-                                if param.grad is not None:
-                                    if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
-                                        print(f"Epoch {epoch} -     VLS_LSTM: Gradient for {name} contains NaN or Infinity before backward!")
-                                        # logging.error(f"Epoch {epoch} -     VLS_LSTM: Gradient for {name} contains NaN or Infinity before backward!")
-                                
-                            for name, param in self.decoder.named_parameters():
-                                if param.grad is not None:
-                                    if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
-                                        print(f"Epoch {epoch} -     DECODER: Gradient for {name} contains NaN or Infinity before backward!")
-                                        # logging.error(f"Epoch {epoch} -     DECODER: Gradient for {name} contains NaN or Infinity before backward!")
-                                
-                        try:
-                            loss_mean.backward()
-                            time_flag_4 = time.time() # backward pass time
+                        # loss_mean.backward()
 
-                        except RuntimeError as e:
-                            # logging.error(f"Epoch {epoch} -      RuntimeError during backward pass!") if debug else None
-                            # logging.error(f"Epoch {epoch} -          Error message: %s", str(e)) if debug else None
-                            # logging.error(f"Epoch {epoch} -          Stack trace:") if debug else None
-                            # logging.error(traceback.format_exc()) if debug else None  # Ghi lại toàn bộ stack trace
-                            raise e
+                        scaler.scale(loss_mean).backward()
 
-                        self.optimizer.step()
+                        time_flag_4 = time.time() # backward pass time
+                        # self.optimizer.step()
+
+                        scaler.step(self.optimizer)
+                        scaler.update()
+
                         time_flag_5 = time.time() # optimizer step time
 
                         # Log loss cho batch
