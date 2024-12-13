@@ -25,7 +25,6 @@ import psutil  # Thư viện để theo dõi CPU, RAM
 from datetime import datetime
 import sys
 import traceback
-# from torch.amp import autocast
 
 def log_resources(epoch):
     """Ghi log thông tin tài nguyên hệ thống."""
@@ -380,7 +379,6 @@ class NAEDynamicLSTM():
                         (labels_teafo_pad, lengths_teafo, mask_teafo), \
                         (labels_aureg_pad, lengths_aureg, mask_aureg),\
                         (labels_reconstruction_pad, lengths_reconstruction, mask_reconstruction) = batch
-                        # with autocast(device_type='cuda'):
                         inputs_lstm = self.encoder(inputs_pad)
                         outputs_teafo_pad, output_aureg_pad = self.vls_lstm(inputs_lstm, lengths_teafo, lengths_aureg, mask_aureg)
                         output_teafo_pad_de = self.decoder(outputs_teafo_pad)
