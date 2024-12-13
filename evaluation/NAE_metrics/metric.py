@@ -37,6 +37,13 @@ class Metric(ABC):
         """
         pass
 
+    @abstractmethod
+    def process_and_plot(self):
+        """
+        Process the computed metric and plot the result.
+        """
+        pass
+
     def post_process(self, result_raw, value_filter, key_filter='input_len', filter_step=1, range_filter=None):
         """
         Lọc dữ liệu result_raw theo key_filter và tính trung bình và độ lệch chuẩn.
@@ -80,64 +87,6 @@ class Metric(ABC):
             result.sort(key=lambda x: x[key_filter])  # Sắp xếp tăng dần
 
         return result
-    
-    def process_and_plot(self, input_seqs, label_seqs, predicted_seqs, id_traj, thrown_object, filter_value, filter_key='len_left'):
-        # convert all elements of input_seqs to numpy
-        input_seqs = [inp.cpu().numpy() for inp in input_seqs]
-
-        # 1. Calculate error
-        metric_result = self.compute(input_seqs, label_seqs, predicted_seqs)
-        if metric_result == None:
-            self.util_printer.print_red(f'Error in metric calculation', background=True)
-            return
-        
-        result_filtered = self.post_process(metric_result, key_filter=filter_key, value_filter=filter_value, filter_step=10, range_filter=(0, 70))
-        plot = input('Do you want to plot trajectory [y/n] ? ')
-        save_plot = input('Do you want to save the plot [y/n] ? ')
-        if save_plot == 'y':
-            save_plot = True
-        else:
-            save_plot = False
-
-        # 2. Plot
-        if plot=='y':
-            # 2.1 Show line chart of change in error with increasing input length
-            x_plot = [rf[filter_key] for rf in result_filtered]
-            mean_errs = [rf[filter_value] for rf in result_filtered]
-            acc_stds = [rf['std'] for rf in result_filtered]
-            if filter_key == 'len_left':
-                label_x = 'Time to the goal (frame)'
-            elif filter_key == 'input_len':
-                label_x = 'Input length (data points)'
-            label_y = f'Prediction Error ({filter_value}) (m)'
-            
-            # self.util_plotter.plot_line_chart(x_values = x_plot, y_values = [mean_errs], y_stds=[acc_stds], 
-            #                                 x_tick_distance=5, 
-            #                                 y_tick_distance=0.01,
-            #                                 font_size_title=32,
-            #                                 font_size_label=24,
-            #                                 font_size_tick=20,
-            #                                 title=f'{thrown_object} - Accumulated error by input length - Trajectory #{id_traj}', 
-            #                                 x_label=label_x, 
-            #                                 y_label=label_y,
-            #                                 legends=None,
-            #                                 save_plot=True,
-            #                                 keep_source_order=True,
-            #                                 std_display_mode='bar')
-
-            self.util_plotter.plot_bar_chart(x_values = x_plot, y_values = [mean_errs], y_stds=[acc_stds], 
-                                            x_tick_distance=5, 
-                                            y_tick_distance=0.01,
-                                            font_size_title=32,
-                                            font_size_label=24,
-                                            font_size_tick=20,
-                                            title=f'{thrown_object} - {filter_value} by input length - Trajectory #{id_traj}', 
-                                            x_label=label_x, 
-                                            y_label=label_y,
-                                            legends=None,
-                                            save_plot=save_plot,
-                                            keep_source_order=True,
-                                            bar_width=0.3)
 
 class MetricAccumulatedError(Metric):
     def __init__(self):
@@ -177,6 +126,51 @@ class MetricAccumulatedError(Metric):
             accumulated_error_by_input_length.append(err_by_inlen) 
         return accumulated_error_by_input_length
     
+    def process_and_plot(self, input_seqs, label_seqs, predicted_seqs, id_traj, thrown_object, filter_value, filter_key='len_left'):
+        # convert all elements of input_seqs to numpy
+        input_seqs = [inp.cpu().numpy() for inp in input_seqs]
+
+        # 1. Calculate error
+        metric_result = self.compute(input_seqs, label_seqs, predicted_seqs)
+        if metric_result == None:
+            self.util_printer.print_red(f'Error in metric calculation', background=True)
+            return
+        
+        result_filtered = self.post_process(metric_result, key_filter=filter_key, value_filter=filter_value, filter_step=10, range_filter=(0, 70))
+        plot = input('Do you want to plot trajectory [y/n] ? ')
+        save_plot = input('Do you want to save the plot [y/n] ? ')
+        if save_plot == 'y':
+            save_plot = True
+        else:
+            save_plot = False
+
+        # 2. Plot
+        if plot=='y':
+            # 2.1 Show line chart of change in error with increasing input length
+            x_plot = [rf[filter_key] for rf in result_filtered]
+            mean_errs = [rf[filter_value] for rf in result_filtered]
+            acc_stds = [rf['std'] for rf in result_filtered]
+            if filter_key == 'len_left':
+                label_x = 'Time to the goal (frame)'
+            elif filter_key == 'input_len':
+                label_x = 'Input length (data points)'
+            label_y = f'Prediction Error ({filter_value}) (m)'
+
+            self.util_plotter.plot_bar_chart(x_values = x_plot, y_values = [mean_errs], y_stds=[acc_stds], 
+                                            # x_tick_distance=5, 
+                                            # y_tick_distance=0.01,
+                                            font_size_title=32,
+                                            font_size_label=20,
+                                            font_size_tick=20,
+                                            font_size_bar_val=15,
+                                            title=f'{thrown_object} - {filter_value} by input length - Trajectory #{id_traj}', 
+                                            x_label=label_x, 
+                                            y_label=label_y,
+                                            legends=None,
+                                            save_plot=save_plot,
+                                            # keep_source_order=True,
+                                            bar_width=0.3)
+    
 class MetricGoalError(Metric):
     def __init__(self):
         super().__init__()  # call the parent class constructor
@@ -208,6 +202,50 @@ class MetricGoalError(Metric):
             # input()
             goal_error_by_length.append(err_by_inlen) 
         return goal_error_by_length
+
+    def process_and_plot(self, input_seqs, label_seqs, predicted_seqs, id_traj, thrown_object, filter_value, filter_key='len_left'):
+        # convert all elements of input_seqs to numpy
+        input_seqs = [inp.cpu().numpy() for inp in input_seqs]
+
+        # 1. Calculate error
+        metric_result = self.compute(input_seqs, label_seqs, predicted_seqs)
+        if metric_result == None:
+            self.util_printer.print_red(f'Error in metric calculation', background=True)
+            return
+        
+        result_filtered = self.post_process(metric_result, key_filter=filter_key, value_filter=filter_value, filter_step=1, range_filter=(0, 80))
+        plot = input('Do you want to plot trajectory [y/n] ? ')
+        save_plot = input('Do you want to save the plot [y/n] ? ')
+        if save_plot == 'y':
+            save_plot = True
+        else:
+            save_plot = False
+
+        # 2. Plot
+        if plot=='y':
+            # 2.1 Show line chart of change in error with increasing input length
+            x_plot = [rf[filter_key] for rf in result_filtered]
+            mean_errs = [rf[filter_value] for rf in result_filtered]
+            acc_stds = [rf['std'] for rf in result_filtered]
+            if filter_key == 'len_left':
+                label_x = 'Time to the goal (frame)'
+            elif filter_key == 'input_len':
+                label_x = 'Input length (data points)'
+            label_y = f'Prediction Error ({filter_value}) (m)'
+            
+            self.util_plotter.plot_line_chart(x_values = x_plot, y_values = [mean_errs], y_stds=[acc_stds], 
+                                            x_tick_distance=5, 
+                                            y_tick_distance=0.01,
+                                            font_size_title=25,
+                                            font_size_label=24,
+                                            font_size_tick=20,
+                                            title=f'{thrown_object} - Impact point error - Trajectory #{id_traj}', 
+                                            x_label=label_x, 
+                                            y_label=label_y,
+                                            legends=None,
+                                            save_plot=True,
+                                            keep_source_order=True,
+                                            std_display_mode='fill')
 
 class MetricLeadingtime(Metric):
     def __init__(self):
