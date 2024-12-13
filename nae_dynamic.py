@@ -25,7 +25,7 @@ import psutil  # Thư viện để theo dõi CPU, RAM
 from datetime import datetime
 import sys
 import traceback
-from torch.amp import autocast
+# from torch.amp import autocast
 
 def log_resources(epoch):
     """Ghi log thông tin tài nguyên hệ thống."""
@@ -380,71 +380,71 @@ class NAEDynamicLSTM():
                         (labels_teafo_pad, lengths_teafo, mask_teafo), \
                         (labels_aureg_pad, lengths_aureg, mask_aureg),\
                         (labels_reconstruction_pad, lengths_reconstruction, mask_reconstruction) = batch
-                        with autocast(device_type='cuda'):
-                            inputs_lstm = self.encoder(inputs_pad)
-                            outputs_teafo_pad, output_aureg_pad = self.vls_lstm(inputs_lstm, lengths_teafo, lengths_aureg, mask_aureg)
-                            output_teafo_pad_de = self.decoder(outputs_teafo_pad)
-                            output_aureg_pad_de = self.decoder(output_aureg_pad)
+                        # with autocast(device_type='cuda'):
+                        inputs_lstm = self.encoder(inputs_pad)
+                        outputs_teafo_pad, output_aureg_pad = self.vls_lstm(inputs_lstm, lengths_teafo, lengths_aureg, mask_aureg)
+                        output_teafo_pad_de = self.decoder(outputs_teafo_pad)
+                        output_aureg_pad_de = self.decoder(output_aureg_pad)
 
-                            ##  ----- LOSS 1: TEACHER FORCING -----
-                            loss_1 = self.criterion(output_teafo_pad_de, labels_teafo_pad).sum(dim=-1)  # Shape: (batch_size, max_seq_len_out)
-                            # Tạo mask dựa trên chiều dài thực
-                            loss_1_mask = loss_1 * mask_teafo  # Masked loss
-                            loss_1_mean = 0
-                            if mask_teafo.sum() != 0:
-                                loss_1_mean = loss_1_mask.sum() / mask_teafo.sum()
+                        ##  ----- LOSS 1: TEACHER FORCING -----
+                        loss_1 = self.criterion(output_teafo_pad_de, labels_teafo_pad).sum(dim=-1)  # Shape: (batch_size, max_seq_len_out)
+                        # Tạo mask dựa trên chiều dài thực
+                        loss_1_mask = loss_1 * mask_teafo  # Masked loss
+                        loss_1_mean = 0
+                        if mask_teafo.sum() != 0:
+                            loss_1_mean = loss_1_mask.sum() / mask_teafo.sum()
 
-                            ## ----- LOSS 2: AUTOREGRESSIVE -----
-                            loss_2 = self.criterion(output_aureg_pad_de, labels_aureg_pad).sum(dim=-1)
-                            loss_2_mask = loss_2 * mask_aureg
-                            loss_2_mean = 0
-                            if mask_aureg.sum() != 0:
-                                loss_2_mean = loss_2_mask.sum() / mask_aureg.sum()
+                        ## ----- LOSS 2: AUTOREGRESSIVE -----
+                        loss_2 = self.criterion(output_aureg_pad_de, labels_aureg_pad).sum(dim=-1)
+                        loss_2_mask = loss_2 * mask_aureg
+                        loss_2_mean = 0
+                        if mask_aureg.sum() != 0:
+                            loss_2_mean = loss_2_mask.sum() / mask_aureg.sum()
 
-                            ## ----- LOSS 3: RECONSTRUCTION -----
-                            loss_3 = self.criterion(self.decoder(inputs_lstm), labels_reconstruction_pad).sum(dim=-1)
-                            loss_3_mask = loss_3 * mask_reconstruction
-                            loss_3_mean = 0
-                            if mask_reconstruction.sum() != 0:
-                                loss_3_mean = loss_3_mask.sum() / mask_reconstruction.sum()
-                            
-                            loss_mean = loss_1_mean + loss_2_mean + loss_3_mean
+                        ## ----- LOSS 3: RECONSTRUCTION -----
+                        loss_3 = self.criterion(self.decoder(inputs_lstm), labels_reconstruction_pad).sum(dim=-1)
+                        loss_3_mask = loss_3 * mask_reconstruction
+                        loss_3_mean = 0
+                        if mask_reconstruction.sum() != 0:
+                            loss_3_mean = loss_3_mask.sum() / mask_reconstruction.sum()
+                        
+                        loss_mean = loss_1_mean + loss_2_mean + loss_3_mean
 
-                            if torch.isnan(loss_1_mean) or torch.isinf(loss_1_mean):
-                                print(f"loss_1_mean contains NaN or Infinity: {loss_1_mean}")
-                                logging.error(f"Epoch {epoch} - loss_1_mean contains NaN or Infinity: {loss_1_mean}")
+                        if torch.isnan(loss_1_mean) or torch.isinf(loss_1_mean):
+                            print(f"loss_1_mean contains NaN or Infinity: {loss_1_mean}")
+                            logging.error(f"Epoch {epoch} - loss_1_mean contains NaN or Infinity: {loss_1_mean}")
 
-                            # Kiểm tra loss_2_mean
-                            if torch.isnan(loss_2_mean) or torch.isinf(loss_2_mean):
-                                print(f"loss_2_mean contains NaN or Infinity: {loss_2_mean}")
-                                logging.error(f"Epoch {epoch} - loss_2_mean contains NaN or Infinity: {loss_2_mean}")
+                        # Kiểm tra loss_2_mean
+                        if torch.isnan(loss_2_mean) or torch.isinf(loss_2_mean):
+                            print(f"loss_2_mean contains NaN or Infinity: {loss_2_mean}")
+                            logging.error(f"Epoch {epoch} - loss_2_mean contains NaN or Infinity: {loss_2_mean}")
 
-                            # Kiểm tra loss_3_mean
-                            if torch.isnan(loss_3_mean) or torch.isinf(loss_3_mean):
-                                print(f"loss_3_mean contains NaN or Infinity: {loss_3_mean}")
-                                logging.error(f"Epoch {epoch} - loss_3_mean contains NaN or Infinity: {loss_3_mean}")
+                        # Kiểm tra loss_3_mean
+                        if torch.isnan(loss_3_mean) or torch.isinf(loss_3_mean):
+                            print(f"loss_3_mean contains NaN or Infinity: {loss_3_mean}")
+                            logging.error(f"Epoch {epoch} - loss_3_mean contains NaN or Infinity: {loss_3_mean}")
 
-                            # Kiểm tra kết nối với đồ thị tính toán
-                            try:
-                                assert loss_1_mean.requires_grad, "loss_1_mean is detached from the computation graph"
-                            except AssertionError as e:
-                                logging.error(f"Epoch {epoch} - loss_1_mean is detached: {loss_1_mean}")
-                                raise e
-                            try:
-                                assert loss_2_mean.requires_grad, "loss_2_mean is detached from the computation graph"
-                            except AssertionError as e:
-                                logging.error(f"Epoch {epoch} - loss_2_mean is detached: {loss_2_mean}")
-                                raise e
-                            try:
-                                assert loss_3_mean.requires_grad, "loss_3_mean is detached from the computation graph"
-                            except AssertionError as e:
-                                logging.error(f"Epoch {epoch} - loss_3_mean is detached: {loss_3_mean}")
-                                raise e
+                        # Kiểm tra kết nối với đồ thị tính toán
+                        try:
+                            assert loss_1_mean.requires_grad, "loss_1_mean is detached from the computation graph"
+                        except AssertionError as e:
+                            logging.error(f"Epoch {epoch} - loss_1_mean is detached: {loss_1_mean}")
+                            raise e
+                        try:
+                            assert loss_2_mean.requires_grad, "loss_2_mean is detached from the computation graph"
+                        except AssertionError as e:
+                            logging.error(f"Epoch {epoch} - loss_2_mean is detached: {loss_2_mean}")
+                            raise e
+                        try:
+                            assert loss_3_mean.requires_grad, "loss_3_mean is detached from the computation graph"
+                        except AssertionError as e:
+                            logging.error(f"Epoch {epoch} - loss_3_mean is detached: {loss_3_mean}")
+                            raise e
 
-                            if torch.isnan(loss_mean) or torch.isinf(loss_mean):
-                                print(f"loss_mean contains NaN or Infinity: {loss_mean}")
-                                logging.error(f"Epoch {epoch} - loss_mean contains NaN or Infinity: {loss_mean}")
-                                raise ValueError("NaN detected in loss!")
+                        if torch.isnan(loss_mean) or torch.isinf(loss_mean):
+                            print(f"loss_mean contains NaN or Infinity: {loss_mean}")
+                            logging.error(f"Epoch {epoch} - loss_mean contains NaN or Infinity: {loss_mean}")
+                            raise ValueError("NaN detected in loss!")
 
                         # Backward pass
                         self.optimizer.zero_grad()
