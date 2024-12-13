@@ -309,15 +309,15 @@ class NAEDynamicLSTM():
         mask_aureg = torch.arange(max(lengths_aureg)).expand(len(lengths_aureg), max(lengths_aureg)) < lengths_aureg.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
         mask_reconstruction = torch.arange(max(lengths_reconstruction)).expand(len(lengths_reconstruction), max(lengths_reconstruction)) < lengths_reconstruction.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
 
-        inputs_pad = inputs_pad.to(self.device).float()
-        labels_teafo_pad = labels_teafo_pad.to(self.device)
-        labels_aureg_pad = labels_aureg_pad.to(self.device)
-        labels_reconstruction_pad= labels_reconstruction_pad.to(self.device)
+        # inputs_pad = inputs_pad.to(self.device).float()
+        # labels_teafo_pad = labels_teafo_pad.to(self.device)
+        # labels_aureg_pad = labels_aureg_pad.to(self.device)
+        # labels_reconstruction_pad= labels_reconstruction_pad.to(self.device)
 
-        mask_in = mask_in.to(self.device)
-        mask_teafo = mask_teafo.to(self.device)
-        mask_aureg = mask_aureg.to(self.device)
-        mask_reconstruction = mask_reconstruction.to(self.device)
+        # mask_in = mask_in.to(self.device)
+        # mask_teafo = mask_teafo.to(self.device)
+        # mask_aureg = mask_aureg.to(self.device)
+        # mask_reconstruction = mask_reconstruction.to(self.device)
         
         return (
             (inputs_pad, lengths_in, mask_in),
@@ -345,7 +345,10 @@ class NAEDynamicLSTM():
 
             # Khởi tạo thời gian bắt đầu
             start_t = time.time()
-            dataloader_train = TorchDataLoader(data_train, batch_size=self.batch_size_train, collate_fn=lambda x: self.collate_pad_fn(x), shuffle=True)
+            dataloader_train = TorchDataLoader(data_train, batch_size=self.batch_size_train, collate_fn=lambda x: self.collate_pad_fn(x), shuffle=True,
+                                                num_workers=8,
+                                                pin_memory=True,
+                                                persistent_workers=True)
 
             for epoch in range(start_epoch, self.num_epochs):
                 self.encoder.train()
@@ -372,6 +375,17 @@ class NAEDynamicLSTM():
                         (labels_teafo_pad, lengths_teafo, mask_teafo), \
                         (labels_aureg_pad, lengths_aureg, mask_aureg),\
                         (labels_reconstruction_pad, lengths_reconstruction, mask_reconstruction) = batch
+
+                        inputs_pad = inputs_pad.to(self.device).float()
+                        labels_teafo_pad = labels_teafo_pad.to(self.device)
+                        labels_aureg_pad = labels_aureg_pad.to(self.device)
+                        labels_reconstruction_pad= labels_reconstruction_pad.to(self.device)
+
+                        mask_in = mask_in.to(self.device)
+                        mask_teafo = mask_teafo.to(self.device)
+                        mask_aureg = mask_aureg.to(self.device)
+                        mask_reconstruction = mask_reconstruction.to(self.device)
+
 
                         time_flag_1 = time.time() # load data time
                         with autocast(device_type='cuda'):
@@ -500,10 +514,13 @@ class NAEDynamicLSTM():
 
                 if (epoch) % 1 == 0:
                     self.util_printer.print_green(f'Epoch [{epoch}/{self.num_epochs}]', background=False)
-                    print(f'    Training speed: {(traing_time+validate_time)/(epoch+1):.3f} s/epoch')
-                    print(f'    Training time left: {(self.num_epochs - (epoch+1)) * (traing_time+validate_time)/(epoch+1)/60:.2f} mins')
-                    print(f'    Loss: {loss_total_train_log:.6f}')
-                    print(f'    learning rate: {self.optimizer.param_groups[0]["lr"]}')
+                    epoch_time = time.time() - start_t
+                    print(f'    Training speed:     {epoch_time/(epoch+1):.3f} s/epoch')
+                    print(f'    Training time left: {(self.num_epochs - (epoch+1)) * epoch_time/(epoch+1)/60:.2f} mins')
+                    print(f'    training time %:    {traing_time/epoch_time:.2f} mins')
+                    print(f'    Validation time %:  {validate_time/epoch_time:.2f} mins')
+                    print(f'    Loss:               {loss_total_train_log:.6f}')
+                    print(f'    learning rate:      {self.optimizer.param_groups[0]["lr"]}')
                     print('\n-----------------------------------')
                 self.scheduler.step()
 
@@ -646,6 +663,17 @@ class NAEDynamicLSTM():
                 (labels_teafo_pad, lengths_teafo, mask_teafo), \
                 (labels_aureg_pad, lengths_aureg, mask_aureg),\
                 (labels_reconstruction_pad, lengths_reconstruction, mask_reconstruction) = batch
+
+                inputs_pad = inputs_pad.to(self.device).float()
+                labels_teafo_pad = labels_teafo_pad.to(self.device)
+                labels_aureg_pad = labels_aureg_pad.to(self.device)
+                labels_reconstruction_pad= labels_reconstruction_pad.to(self.device)
+
+                mask_in = mask_in.to(self.device)
+                mask_teafo = mask_teafo.to(self.device)
+                mask_aureg = mask_aureg.to(self.device)
+                mask_reconstruction = mask_reconstruction.to(self.device)
+
 
                 # Predict
                 inputs_lstm = self.encoder(inputs_pad)
