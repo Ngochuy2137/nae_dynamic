@@ -17,3 +17,4 @@
 
 *.egg-info/
 *.zip
+*.log
