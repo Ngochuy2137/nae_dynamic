@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader as TorchDataLoader
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
 import torch.nn as nn
 import torch.optim as optim
+from torch.optim.lr_scheduler import LambdaLR
 import random
 import wandb
 from datetime import datetime
@@ -210,7 +211,7 @@ class VLSLSTM(nn.Module):
 #------------------------- TRAINING -------------------------
 class NAEDynamicLSTM():
     def __init__(self, input_size, hidden_size, output_size, num_layers_lstm, lr, 
-                 num_epochs, batch_size_train, batch_size_val, save_interval, thrown_object,
+                 num_epochs, batch_size_train, batch_size_val, save_interval, thrown_object, warmup_steps=0,
                  device=torch.device('cuda'),
                  data_dir=''):
         self.utils = NAE_Utils()
@@ -228,6 +229,7 @@ class NAEDynamicLSTM():
         self.save_interval = save_interval
         self.thrown_object = thrown_object + '_model'
         self.data_dir = data_dir
+        self.warmup_steps = warmup_steps
 
         self.run_name = f"NAE_DYNAMIC-model_{datetime.now().strftime('%d-%m-%Y_%H-%M-%S')}_hiddensize{hidden_size}"
 
@@ -241,7 +243,8 @@ class NAEDynamicLSTM():
         self.decoder = Decoder(hidden_size, output_size).to(device)
 
         self.criterion = nn.MSELoss(reduction='none').to(device)  # NOTE: Reduction 'none' to apply masking, default is 'mean'
-        self.optimizer = optim.Adam(list(self.encoder.parameters()) + list(self.vls_lstm.parameters()) + list(self.decoder.parameters()), lr=lr)
+        self.optimizer = optim.Adam(list(self.encoder.parameters()) + list(self.vls_lstm.parameters()) + list(self.decoder.parameters()), lr=lr)        
+        self.scheduler = LambdaLR(self.optimizer, lr_lambda=self.warmup_lr_scheduler)
 
         self.util_printer = Printer()
         self.util_plotter = Plotter()
@@ -254,6 +257,12 @@ class NAEDynamicLSTM():
         print('Total number of parameters: ', self.utils.count_parameters(self.encoder) + self.utils.count_parameters(self.vls_lstm) + self.utils.count_parameters(self.decoder))
 
 
+    def warmup_lr_scheduler(self, epoch):
+        if epoch < self.warmup_steps:
+            ratio = (epoch + 1) / self.warmup_steps
+            print('     - Warm-up ratio: ', ratio)
+            return ratio  # Tăng dần từ 0 đến 1
+        return 1.0  # Sau warm-up, giữ nguyên learning rate
 
     def collate_pad_fn(self, batch):
         inputs, labels_teafo, labels_aureg, label_reconstruction = zip(*batch)
@@ -509,14 +518,16 @@ class NAEDynamicLSTM():
                         "valid_mean_nade_future": mean_nade_future,
                         "valid_mean_final_step_err": mean_final_step_err,
                         "valid_capture_success_rate": capture_success_rate,
-                        "training_time_mins": traing_time/60
+                        "training_time_mins": traing_time/60,
+                        "learning_rate": self.optimizer.param_groups[0]['lr']
                         },
                         step=epoch
                     )
 
-                if (epoch) % 10 == 0:
-                    self.util_printer.print_green(f'Epoch [{epoch}/{self.num_epochs}], Loss: {loss_total_train_log:.6f}, traing time: {traing_time:.2f} s ({traing_time/(traing_time+validate_time)*100} %), validate time: {validate_time:.2f} s ({validate_time/(traing_time+validate_time)*100} %)')
+                if (epoch) % 1 == 0:
+                    self.util_printer.print_green(f'Epoch [{epoch}/{self.num_epochs}], Loss: {loss_total_train_log:.6f}, traing time: {traing_time:.2f} s ({traing_time/(traing_time+validate_time)*100} %), validate time: {validate_time:.2f} s ({validate_time/(traing_time+validate_time)*100} %), learning rate: {self.optimizer.param_groups[0]["lr"]}', background=False)
                     print('\n-----------------------------------')
+                self.scheduler.step()
 
         finally:
             if sys.stdout:
