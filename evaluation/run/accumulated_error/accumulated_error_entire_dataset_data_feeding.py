@@ -7,7 +7,6 @@ The input_seqs includes input seqs with increasing length
 (We will get mean accumulated error for each input length)
 '''
 
-
 def main():
     metric = MetricAccumulatedError()
     device = torch.device('cuda')
@@ -15,11 +14,6 @@ def main():
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
-
-    # --- Data and model ---
-    id_traj = 'last 70 frames'
-    filter_key = 'len_left'
-    filter_value = 'accumulated_error'
 
     # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/nae_paper_dataset/new_data_format/bamboo/split/bamboo'
     # object_name = 'bamboo'
@@ -42,6 +36,8 @@ def main():
     # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_11-12-2024_23-57-46_hiddensize128/@epochs520_data18616_batchsize256_hiddensize128_timemin133-66_NAE_DYNAMIC'
     # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_12-12-2024_13-28-27_hiddensize128/epochs810_data18616_batchsize256_hiddensize128_timemin214-54_NAE_DYNAMIC'
     saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_13-12-2024_12-28-33_hiddensize128-warmup-weightdecay/@epochs840_data18616_batchsize256_hiddensize128_timemin221-04_NAE_DYNAMIC'
+    
+    
     
     # Training parameters 
     training_params = {
@@ -69,24 +65,64 @@ def main():
     # prepare data for training
     nae.load_model(saved_model_dir, weights_only=True)
 
-    '''
-    Consider all trajectory in the test dataset
-    The trajectory is split into many input-label pairs
-    '''
-    input_label_generator = InputLabelGenerator()
-    # Pairing the trajectory into many input-label pairs
-    data_test = input_label_generator.generate_input_label_dynamic_seqs(data_test_raw, step_start=5, step_end=-3, increment=1, shuffle=False)
-    # Inference
-    predicted_seqs, label_seqs = nae.validate_and_score(data=data_test, batch_size=1024, shuffle=False, inference=True)
+    xy_pairs = []
+    for id_traj, traj in enumerate(data_test_raw):
+        # if id_traj != 5:
+        #     continue
+        '''
+        Consider each trajectory
+        The trajectory is split into many input-label pairs
+        '''
+        input_label_generator = InputLabelGenerator()
 
-    print(f'There {len(predicted_seqs)} groups of input-label-prediction sequences')
+        # Pairing the trajectory into many input-label pairs
+        data_test = input_label_generator.generate_input_label_dynamic_seqs([traj], step_start=5, step_end=-3, increment=1, shuffle=False)
+        # Inference
+        predicted_seqs, label_seqs = nae.validate_and_score(data=data_test, batch_size=1024, shuffle=False, inference=True)
 
-    input_seqs = [inp[0] for inp in data_test]
-    metric.process_and_plot(input_seqs=input_seqs, predicted_seqs=predicted_seqs, label_seqs=label_seqs, 
-                            thrown_object=thrown_object, id_traj=id_traj, 
-                            filter_key=filter_key, filter_value=filter_value)
+        print('\n---------------------------------------------------')
+        print('Considering trajectory: ', id_traj)
+        print(f'    There {len(predicted_seqs)} groups of input-label-prediction sequences')
+
+        input_data = [inp[0] for inp in data_test]
+        # convert all elements of input_data to numpy
+        input_data = [inp.cpu().numpy() for inp in input_data]
+
+        
+
+        # 1. Calculate accumulated error for one trajectory
+        accumulated_err = metric.compute(input_data, label_seqs, predicted_seqs)
+        if accumulated_err == None:
+            metric.util_printer.print_red(f'Error in metric calculation', background=True)
+            return
+        
+        # plot = input('    Do you want to plot [y/n] ? ')
+        plot='y'
+        # 2. Plot
+        if plot=='y':
+            # 2.1 Show line chart of change in accumulated error with increasing input length
+            input_lengths = [acer['input_len'] for acer in accumulated_err]
+            mean_acc_errs = [acer['accumulated_error'] for acer in accumulated_err]
+
+            xy_pairs.append((input_lengths, mean_acc_errs))
+            # metric.util_plotter.plot_line_chart(x_values = input_lengths, y_values = [mean_acc_errs], 
+            #                                 x_tick_distance=5, 
+            #                                 y_tick_distance=0.02,
+            #                                 font_size_title=32,
+            #                                 font_size_label=24,
+            #                                 font_size_tick=20,
+            #                                 title=f'{thrown_object} - Accumulated error by input length - Trajectory #{id_traj}', 
+            #                                 x_label='Input length (data points)', 
+            #                                 y_label='Accumulated error (m)',
+            #                                 legends=None,
+            #                                 save_plot=False)
+            # # 2.2 Show the predictions in 3D plot
+            # metric.util_plotter.plot_predictions_plotly(inputs=input_data, labels=label_seqs, predictions=predicted_seqs, 
+            #                                             title=f'{thrown_object} - Predictions - Trajectory #{id_traj}', rotate_data_whose_y_up=True, 
+            #                                             save_plot=False, font_size_note=12,
+            #                                             show_all_as_default=False)
     
-    
+    metric.util_plotter.plot_variable_length_line_chart(xy_pairs, x_label='Input length (data points)', y_label='Accumulated error (m)', title=f'{thrown_object} - Accumulated error by input length', save_plot=False)
 
 if __name__ == '__main__':
     main()

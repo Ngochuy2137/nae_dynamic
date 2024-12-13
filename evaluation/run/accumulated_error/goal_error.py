@@ -13,13 +13,26 @@ def main():
     filter_key = 'len_left'
     filter_value = 'goal_error'
 
-    # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_prediction_ws/src/nae/data/rllab_dataset_no_orientation/data_enrichment/big_plane/big_plane_enrich_for_training'
-    # thrown_object = 'big_plane'
-    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/big_plane-dynamic-len_model/NAE_DYNAMIC-model_02-12-2024_19-10-47_hiddensize128/@epochs260_data31529_batchsize128_hiddensize128_timemin195-45_NAE_DYNAMIC'
+    # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/nae_paper_dataset/new_data_format/bamboo/split/bamboo'
+    # object_name = 'bamboo'
+    # # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/bamboo-dynamic-len_model/NAE_DYNAMIC-model_09-12-2024_19-35-08_hiddensize128/@epochs500_data14770_batchsize256_hiddensize128_timemin108-23_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/bamboo-dynamic-len_model/NAE_DYNAMIC-model_09-12-2024_19-35-08_hiddensize128/@epochs2880_data14770_batchsize256_hiddensize128_timemin626-51_NAE_DYNAMIC'
 
-    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_prediction_ws/src/nae/data/nae_paper_dataset/new_data_format/bamboo/split/bamboo'
-    thrown_object = 'bamboo'
-    saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/bamboo-dynamic-len_model/NAE_DYNAMIC-model_05-12-2024_21-17-51_hiddensize128/@epochs480_data14770_batchsize256_hiddensize128_timemin76-37_NAE_DYNAMIC'
+    # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/nae_paper_dataset/new_data_format/banana/split/banana'
+    # thrown_object = 'banana'
+    # # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/banana-dynamic-len_model/NAE_DYNAMIC-model_10-12-2024_19-59-34_hiddensize128/@epochs450_data55011_batchsize256_hiddensize128_timemin211-94_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/banana-dynamic-len_model/NAE_DYNAMIC-model_10-12-2024_19-59-34_hiddensize128/@epochs880_data55011_batchsize256_hiddensize128_timemin504-96_NAE_DYNAMIC'
+
+    # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/nae_paper_dataset/new_data_format/bottle/split/bottle'
+    # thrown_object = 'bottle'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/bottle-dynamic-len_model/NAE_DYNAMIC-model_11-12-2024_14-09-03_hiddensize128/@epochs2660_data9262_batchsize256_hiddensize128_timemin312-51_NAE_DYNAMIC'
+
+    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/nae_paper_dataset/new_data_format/gourd/split/gourd'
+    thrown_object = 'gourd'
+    saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_11-12-2024_23-57-46_hiddensize128/@epochs520_data18616_batchsize256_hiddensize128_timemin133-66_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_12-12-2024_13-28-27_hiddensize128-warmup/@epochs810_data18616_batchsize256_hiddensize128_timemin214-54_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_13-12-2024_12-28-33_hiddensize128-warmup-weightdecay/@epochs840_data18616_batchsize256_hiddensize128_timemin221-04_NAE_DYNAMIC'
+
 
     # Training parameters 
     training_params = {
