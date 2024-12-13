@@ -25,6 +25,7 @@ import psutil  # Thư viện để theo dõi CPU, RAM
 from datetime import datetime
 import sys
 import traceback
+from torch.cuda.amp import autocast, GradScaler
 
 def log_resources(epoch):
     """Ghi log thông tin tài nguyên hệ thống."""
@@ -372,6 +373,7 @@ class NAEDynamicLSTM():
                 batch_idx = 0
                 for batch in dataloader_train:
                     time_batch_start = time.time()
+                    self.util_printer.print_green(f'Batch: {batch_idx}')
                     batch_idx += 1
                     # logging.info(f"\nBatch {batch_idx}:") if debug else None
                     try:
@@ -380,10 +382,15 @@ class NAEDynamicLSTM():
                         (labels_teafo_pad, lengths_teafo, mask_teafo), \
                         (labels_aureg_pad, lengths_aureg, mask_aureg),\
                         (labels_reconstruction_pad, lengths_reconstruction, mask_reconstruction) = batch
+
+                        time_flag_1 = time.time() # load data time
+
                         inputs_lstm = self.encoder(inputs_pad)
                         outputs_teafo_pad, output_aureg_pad = self.vls_lstm(inputs_lstm, lengths_teafo, lengths_aureg, mask_aureg)
                         output_teafo_pad_de = self.decoder(outputs_teafo_pad)
                         output_aureg_pad_de = self.decoder(output_aureg_pad)
+
+                        time_flag_2 = time.time() # forward pass time
 
                         ##  ----- LOSS 1: TEACHER FORCING -----
                         loss_1 = self.criterion(output_teafo_pad_de, labels_teafo_pad).sum(dim=-1)  # Shape: (batch_size, max_seq_len_out)
@@ -408,6 +415,8 @@ class NAEDynamicLSTM():
                             loss_3_mean = loss_3_mask.sum() / mask_reconstruction.sum()
                         
                         loss_mean = loss_1_mean + loss_2_mean + loss_3_mean
+
+                        time_flag_3 = time.time() # loss cal time
 
                         if debug:
                             if torch.isnan(loss_1_mean) or torch.isinf(loss_1_mean):
@@ -469,6 +478,8 @@ class NAEDynamicLSTM():
                                 
                         try:
                             loss_mean.backward()
+                            time_flag_4 = time.time() # backward pass time
+
                         except RuntimeError as e:
                             # logging.error(f"Epoch {epoch} -      RuntimeError during backward pass!") if debug else None
                             # logging.error(f"Epoch {epoch} -          Error message: %s", str(e)) if debug else None
@@ -477,12 +488,21 @@ class NAEDynamicLSTM():
                             raise e
 
                         self.optimizer.step()
+                        time_flag_5 = time.time() # optimizer step time
 
                         # Log loss cho batch
                         loss_total_train_log += loss_mean.item()
                         loss_1_train_log += loss_1_mean.item()
                         loss_2_train_log += loss_2_mean.item()
                         loss_3_train_log += loss_3_mean.item()
+
+                        time_batch_total = time.time() - time_batch_start
+                        print(f'    Load data time:     {(time_flag_1 - time_batch_start)/time_batch_total:.3f}')
+                        print(f'    Forward pass time:  {(time_flag_2 - time_flag_1)/time_batch_total:.3f}')
+                        print(f'    Loss cal time:      {(time_flag_3 - time_flag_2)/time_batch_total:.3f}')
+                        print(f'    Backward pass time: {(time_flag_4 - time_flag_3)/time_batch_total:.3f}')
+                        print(f'    Optimizer step time: {(time_flag_5 - time_flag_4)/time_batch_total:.3f}')
+                        print(f'    Total batch time:   {time_batch_total/13.5:.3f}')
 
                     except RuntimeError as e:
                         # logging.error(f"Epoch {epoch} -      RuntimeError during training!") if debug else None
