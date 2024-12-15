@@ -133,13 +133,14 @@ class VLSLSTM(nn.Module):
 
         # output_seq = torch.zeros(batch_size, max_len, hidden_size).to(input_aureg_init[0].device) # -> hardcore calculate
         # create output_seq with dtype of input_aureg_init
-        output_seq = torch.zeros(batch_size, max_len, hidden_size, device=input_aureg_init.device, dtype=input_aureg_init.dtype)       # IMPROVE 1: Use dtype of input_aureg_init -> save 20% training time
+        output_seq = torch.zeros(batch_size, max_len, hidden_size, device=input_aureg_init.device, dtype=input_aureg_init.dtype)        # IMPROVE 1: Use dtype of input_aureg_init                  -> save 16.6% training time 12.5s/epoch -> 10.4s/epoch
 
         # Lấy bước đầu tiên làm đầu vào ban đầu
         lstm_input = input_aureg_init  # Kích thước (batch_size, 1, feature_size)
         # Duyệt qua từng bước thời gian
         for t in range(max_len):
-            current_mask = mask_aureg[:, t]  # Mask tại bước thời gian t            
+            # current_mask = mask_aureg[:, t]  # Mask tại bước thời gian t   
+            current_mask = torch.nonzero(mask_aureg[:, t], as_tuple=True)[0]  # Chỉ số hợp lệ cho batch tại bước t                      # IMPROVE 2: Use torch.nonzero -> save 10% training time    -> save 20% training time 10.4s/epoch -> 8.4s/epoch
             if not current_mask.any():  # Nếu tất cả đều là padding, dừng lại
                 logging.error("          VLSLSTM - current_mask.any() = False -> exit")
                 print('current_mask.any() = False -> exit')
