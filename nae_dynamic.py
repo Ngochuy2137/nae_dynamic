@@ -131,7 +131,9 @@ class VLSLSTM(nn.Module):
         max_len = lengths_aureg.max().item()
         hidden_size = self.lstm.hidden_size
 
-        output_seq = torch.zeros(batch_size, max_len, hidden_size).to(input_aureg_init[0].device)
+        # output_seq = torch.zeros(batch_size, max_len, hidden_size).to(input_aureg_init[0].device) # -> hardcore calculate
+        # create output_seq with dtype of input_aureg_init
+        output_seq = torch.zeros(batch_size, max_len, hidden_size, device=input_aureg_init.device, dtype=input_aureg_init.dtype)       # IMPROVE 1: Use dtype of input_aureg_init -> save 20% training time
 
         # Lấy bước đầu tiên làm đầu vào ban đầu
         lstm_input = input_aureg_init  # Kích thước (batch_size, 1, feature_size)
@@ -364,6 +366,7 @@ class NAEDynamicLSTM():
 
                 # logging.info(f"\n\n====================     EPOCH {epoch}     ====================")        
                 batch_idx = 0
+                time_batch_all = []
                 for batch in dataloader_train:
                     time_batch_start = time.time()
                     self.util_printer.print_green(f'Batch: {batch_idx}')
@@ -376,15 +379,15 @@ class NAEDynamicLSTM():
                         (labels_aureg_pad, lengths_aureg, mask_aureg),\
                         (labels_reconstruction_pad, lengths_reconstruction, mask_reconstruction) = batch
 
-                        inputs_pad = inputs_pad.to(self.device).float()
-                        labels_teafo_pad = labels_teafo_pad.to(self.device)
-                        labels_aureg_pad = labels_aureg_pad.to(self.device)
-                        labels_reconstruction_pad= labels_reconstruction_pad.to(self.device)
+                        inputs_pad = inputs_pad.to(self.device, non_blocking=True).float()
+                        labels_teafo_pad = labels_teafo_pad.to(self.device, non_blocking=True)
+                        labels_aureg_pad = labels_aureg_pad.to(self.device, non_blocking=True)
+                        labels_reconstruction_pad= labels_reconstruction_pad.to(self.device, non_blocking=True)
 
-                        mask_in = mask_in.to(self.device)
-                        mask_teafo = mask_teafo.to(self.device)
-                        mask_aureg = mask_aureg.to(self.device)
-                        mask_reconstruction = mask_reconstruction.to(self.device)
+                        mask_in = mask_in.to(self.device, non_blocking=True)
+                        mask_teafo = mask_teafo.to(self.device, non_blocking=True)
+                        mask_aureg = mask_aureg.to(self.device, non_blocking=True)
+                        mask_reconstruction = mask_reconstruction.to(self.device, non_blocking=True)
 
 
                         time_flag_1 = time.time() # load data time
@@ -443,13 +446,15 @@ class NAEDynamicLSTM():
                         loss_2_train_log += loss_2_mean.item()
                         loss_3_train_log += loss_3_mean.item()
 
+                        torch.cuda.synchronize()
                         time_batch_total = time.time() - time_batch_start
-                        print(f'    Load data time:     {(time_flag_1 - time_batch_start)/time_batch_total:.3f}')
-                        print(f'    Forward pass time:  {(time_flag_2 - time_flag_1)/time_batch_total:.3f}')
-                        print(f'    Loss cal time:      {(time_flag_3 - time_flag_2)/time_batch_total:.3f}')
-                        print(f'    Backward pass time: {(time_flag_4 - time_flag_3)/time_batch_total:.3f}')
-                        print(f'    Optimizer step time: {(time_flag_5 - time_flag_4)/time_batch_total:.3f}')
-                        print(f'    Total batch time:   {time_batch_total/13.5:.3f}')
+                        print(f'    Load data time:     % {(time_flag_1 - time_batch_start)/time_batch_total:.3f}')
+                        print(f'    Forward pass time:  % {(time_flag_2 - time_flag_1)/time_batch_total:.3f}')
+                        print(f'    Loss cal time:      % {(time_flag_3 - time_flag_2)/time_batch_total:.3f}')
+                        print(f'    Backward pass time: % {(time_flag_4 - time_flag_3)/time_batch_total:.3f}')
+                        print(f'    Optimizer step time:% {(time_flag_5 - time_flag_4)/time_batch_total:.3f}')
+                        print(f'    Total batch time: sec {time_batch_total}')
+                        time_batch_all.append(time_batch_total)
 
                     except RuntimeError as e:
                         # logging.error(f"Epoch {epoch} -      RuntimeError during training!") if debug else None
@@ -459,6 +464,11 @@ class NAEDynamicLSTM():
                         sys.stderr.flush()
                         log_resources(epoch)
                         raise e
+                    
+                # calculate mean time per batch
+                time_batch_all = np.array(time_batch_all)
+                time_batch_mean = np.mean(time_batch_all)
+                self.util_printer.print_green(f'Mean time per batch: {time_batch_mean:.3f} s')
 
 
                 # get average loss over all batches
@@ -514,11 +524,11 @@ class NAEDynamicLSTM():
 
                 if (epoch) % 1 == 0:
                     self.util_printer.print_green(f'Epoch [{epoch}/{self.num_epochs}]', background=False)
-                    epoch_time = time.time() - start_t
-                    print(f'    Training speed:     {epoch_time/(epoch+1):.3f} s/epoch')
-                    print(f'    Training time left: {(self.num_epochs - (epoch+1)) * epoch_time/(epoch+1)/60:.2f} mins')
-                    print(f'    training time %:    {traing_time/epoch_time:.2f} mins')
-                    print(f'    Validation time %:  {validate_time/epoch_time:.2f} mins')
+                    total_time = time.time() - start_t
+                    print(f'    Training speed:     {total_time/(epoch+1):.3f} s/epoch')
+                    print(f'    Training time left: {(self.num_epochs - (epoch+1)) * total_time/(epoch+1)/60:.2f} mins')
+                    print(f'    training time %:    {traing_time/total_time:.2f} mins')
+                    print(f'    Validation time %:  {validate_time/total_time:.2f} mins')
                     print(f'    Loss:               {loss_total_train_log:.6f}')
                     print(f'    learning rate:      {self.optimizer.param_groups[0]["lr"]}')
                     print('\n-----------------------------------')
