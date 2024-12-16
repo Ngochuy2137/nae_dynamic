@@ -369,8 +369,8 @@ class NAEDynamicLSTM():
                 batch_idx = 0
                 time_batch_all = []
                 for batch in dataloader_train:
-                    time_batch_start = time.time()
-                    self.util_printer.print_green(f'Batch: {batch_idx}')
+                    # time_batch_start = time.time()
+                    # self.util_printer.print_green(f'Batch: {batch_idx}')
                     batch_idx += 1
                     # logging.info(f"\nBatch {batch_idx}:") if debug else None
                     try:
@@ -391,14 +391,14 @@ class NAEDynamicLSTM():
                         mask_reconstruction = mask_reconstruction.to(self.device, non_blocking=True)
 
 
-                        time_flag_1 = time.time() # load data time
+                        # time_flag_1 = time.time() # load data time
                         with autocast(device_type='cuda'):
                             inputs_lstm = self.encoder(inputs_pad)
                             outputs_teafo_pad, output_aureg_pad = self.vls_lstm(inputs_lstm, lengths_teafo, lengths_aureg, mask_aureg)
                             output_teafo_pad_de = self.decoder(outputs_teafo_pad)
                             output_aureg_pad_de = self.decoder(output_aureg_pad)
                             
-                            time_flag_2 = time.time() # forward pass time
+                            # time_flag_2 = time.time() # forward pass time
 
                             ##  ----- LOSS 1: TEACHER FORCING -----
                             loss_1 = self.criterion(output_teafo_pad_de, labels_teafo_pad).sum(dim=-1)  # Shape: (batch_size, max_seq_len_out)
@@ -424,7 +424,7 @@ class NAEDynamicLSTM():
                             
                             loss_mean = loss_1_mean + loss_2_mean + loss_3_mean
 
-                            time_flag_3 = time.time() # loss cal time
+                            # time_flag_3 = time.time() # loss cal time
 
                         # Backward pass
                         self.optimizer.zero_grad()
@@ -433,13 +433,13 @@ class NAEDynamicLSTM():
 
                         scaler.scale(loss_mean).backward()
 
-                        time_flag_4 = time.time() # backward pass time
+                        # time_flag_4 = time.time() # backward pass time
                         # self.optimizer.step()
 
                         scaler.step(self.optimizer)
                         scaler.update()
 
-                        time_flag_5 = time.time() # optimizer step time
+                        # time_flag_5 = time.time() # optimizer step time
 
                         # Log loss cho batch
                         loss_total_train_log += loss_mean.item()
@@ -447,15 +447,15 @@ class NAEDynamicLSTM():
                         loss_2_train_log += loss_2_mean.item()
                         loss_3_train_log += loss_3_mean.item()
 
-                        torch.cuda.synchronize()
-                        time_batch_total = time.time() - time_batch_start
-                        print(f'    Load data time:     % {(time_flag_1 - time_batch_start)/time_batch_total:.3f}')
-                        print(f'    Forward pass time:  % {(time_flag_2 - time_flag_1)/time_batch_total:.3f}')
-                        print(f'    Loss cal time:      % {(time_flag_3 - time_flag_2)/time_batch_total:.3f}')
-                        print(f'    Backward pass time: % {(time_flag_4 - time_flag_3)/time_batch_total:.3f}')
-                        print(f'    Optimizer step time:% {(time_flag_5 - time_flag_4)/time_batch_total:.3f}')
-                        print(f'    Total batch time: sec {time_batch_total}')
-                        time_batch_all.append(time_batch_total)
+                        # torch.cuda.synchronize()
+                        # time_batch_total = time.time() - time_batch_start
+                        # print(f'    Load data time:     % {(time_flag_1 - time_batch_start)/time_batch_total:.3f}')
+                        # print(f'    Forward pass time:  % {(time_flag_2 - time_flag_1)/time_batch_total:.3f}')
+                        # print(f'    Loss cal time:      % {(time_flag_3 - time_flag_2)/time_batch_total:.3f}')
+                        # print(f'    Backward pass time: % {(time_flag_4 - time_flag_3)/time_batch_total:.3f}')
+                        # print(f'    Optimizer step time:% {(time_flag_5 - time_flag_4)/time_batch_total:.3f}')
+                        # print(f'    Total batch time: sec {time_batch_total}')
+                        # time_batch_all.append(time_batch_total)
 
                     except RuntimeError as e:
                         # logging.error(f"Epoch {epoch} -      RuntimeError during training!") if debug else None
@@ -466,10 +466,10 @@ class NAEDynamicLSTM():
                         log_resources(epoch)
                         raise e
                     
-                # calculate mean time per batch
-                time_batch_all = np.array(time_batch_all)
-                time_batch_mean = np.mean(time_batch_all)
-                self.util_printer.print_green(f'Mean time per batch: {time_batch_mean:.3f} s')
+                # # calculate mean time per batch
+                # time_batch_all = np.array(time_batch_all)
+                # time_batch_mean = np.mean(time_batch_all)
+                # self.util_printer.print_green(f'Mean time per batch: {time_batch_mean:.3f} s')
 
 
                 # get average loss over all batches
