@@ -27,6 +27,8 @@ import sys
 import traceback
 from torch.amp import autocast, GradScaler
 
+printer_global = Printer()
+
 def log_resources(epoch):
     """Ghi log thông tin tài nguyên hệ thống."""
     # GPU Memory
@@ -129,11 +131,16 @@ class VLSLSTM(nn.Module):
     def auto_regressive_loop(self, input_aureg_init, hi, ci, lengths_aureg, mask_aureg):
         batch_size = input_aureg_init.size(0)
         max_len = lengths_aureg.max().item()
-        hidden_size = self.lstm.hidden_size
+
+        if mask_aureg.shape[1] != max_len:
+            printer_global.print_red(f'VLSLSTM - mask_aureg.shape[1] != max_len -> exit')
+            print('     mask_aureg shape: ', mask_aureg.shape)
+            print('     max_len: ', max_len)
+            return
 
         # output_seq = torch.zeros(batch_size, max_len, hidden_size).to(input_aureg_init[0].device) # -> hardcore calculate
         # create output_seq with dtype of input_aureg_init
-        output_seq = torch.zeros(batch_size, max_len, hidden_size, device=input_aureg_init.device, dtype=input_aureg_init.dtype)        # IMPROVE 1: Use dtype of input_aureg_init                  -> save 16.6% training time 12.5s/epoch -> 10.4s/epoch
+        output_seq = torch.zeros(batch_size, max_len, self.lstm.hidden_size, device=input_aureg_init.device, dtype=input_aureg_init.dtype)        # IMPROVE 1: Use dtype of input_aureg_init                  -> save 16.6% training time 12.5s/epoch -> 10.4s/epoch
 
         # Lấy bước đầu tiên làm đầu vào ban đầu
         lstm_input = input_aureg_init  # Kích thước (batch_size, 1, feature_size)
@@ -141,9 +148,12 @@ class VLSLSTM(nn.Module):
         for t in range(max_len):
             # current_mask = mask_aureg[:, t]  # Mask tại bước thời gian t   
             current_mask = torch.nonzero(mask_aureg[:, t], as_tuple=True)[0]  # Chỉ số hợp lệ cho batch tại bước t                      # IMPROVE 2: Use torch.nonzero -> save 10% training time    -> save 20% training time 10.4s/epoch -> 8.4s/epoch
-            if not current_mask.any():  # Nếu tất cả đều là padding, dừng lại
-                logging.error("          VLSLSTM - current_mask.any() = False -> exit")
-                print('current_mask.any() = False -> exit')
+            if current_mask.shape[0] == 0:  # Nếu tất cả đều là padding, dừng lại
+                logging.error("          VLSLSTM - current_mask.shape[0] == 0 -> exit")
+                printer_global.print_red(f'There might be some error in mask making process')
+                print(f'     current_mask.shape[0] == 0 -> exit. t: {t}, max_len: {max_len}')
+                print('     mask_aureg shape: ', mask_aureg.shape)
+                print('     max_len: ', max_len)
                 break
 
             # Bỏ những phần tử được padding dựa vào mask, các tensor sẽ được rút ngắn lại theo chiều batch_size
@@ -158,7 +168,7 @@ class VLSLSTM(nn.Module):
             ci[:, current_mask, :] = ci_new
 
             # Lưu output vào tensor output_seq
-            temp_output = torch.zeros(batch_size, 1, hidden_size, device=output.device, dtype=output.dtype)
+            temp_output = torch.zeros(batch_size, 1, self.lstm.hidden_size, device=output.device, dtype=output.dtype)
             temp_output[current_mask] = output  # Ghi output của các chuỗi thực # chỉ những chuỗi có mask = 1 mới được gán giá trị, còn lại vẫn giữ nguyên giá trị 0
             # Cập nhật đầu vào cho bước tiếp theo
             lstm_input = temp_output[:, -1:, :]  # Sử dụng output hiện tại làm input tiếp theo
@@ -307,20 +317,10 @@ class NAEDynamicLSTM():
         labels_reconstruction_pad = pad_sequence(label_reconstruction, batch_first=True)
 
         # Tạo mask dựa trên độ dài của chuỗi
-        mask_in = torch.arange(max(lengths_in)).expand(len(lengths_in), max(lengths_in)) < lengths_in.unsqueeze(1) # shape: (batch_size, max_seq_len_in)
-        mask_teafo = torch.arange(max(lengths_teafo)).expand(len(lengths_teafo), max(lengths_teafo)) < lengths_teafo.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
-        mask_aureg = torch.arange(max(lengths_aureg)).expand(len(lengths_aureg), max(lengths_aureg)) < lengths_aureg.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
-        mask_reconstruction = torch.arange(max(lengths_reconstruction)).expand(len(lengths_reconstruction), max(lengths_reconstruction)) < lengths_reconstruction.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
-
-        # inputs_pad = inputs_pad.to(self.device).float()
-        # labels_teafo_pad = labels_teafo_pad.to(self.device)
-        # labels_aureg_pad = labels_aureg_pad.to(self.device)
-        # labels_reconstruction_pad= labels_reconstruction_pad.to(self.device)
-
-        # mask_in = mask_in.to(self.device)
-        # mask_teafo = mask_teafo.to(self.device)
-        # mask_aureg = mask_aureg.to(self.device)
-        # mask_reconstruction = mask_reconstruction.to(self.device)
+        mask_in = torch.arange(lengths_in.max().item()).expand(len(lengths_in), lengths_in.max().item()) < lengths_in.unsqueeze(1) # shape: (batch_size, max_seq_len_in)
+        mask_teafo = torch.arange(lengths_teafo.max().item()).expand(len(lengths_teafo), lengths_teafo.max().item()) < lengths_teafo.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
+        mask_aureg = torch.arange(lengths_aureg.max().item()).expand(len(lengths_aureg), lengths_aureg.max().item()) < lengths_aureg.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
+        mask_reconstruction = torch.arange(lengths_reconstruction.max().item()).expand(len(lengths_reconstruction), lengths_reconstruction.max().item()) < lengths_reconstruction.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
         
         return (
             (inputs_pad, lengths_in, mask_in),
@@ -354,6 +354,7 @@ class NAEDynamicLSTM():
                                                 persistent_workers=True)
 
             for epoch in range(start_epoch, self.num_epochs):
+                time_start_epoch = time.time()
                 self.encoder.train()
                 self.vls_lstm.train()
                 self.decoder.train()
@@ -367,7 +368,7 @@ class NAEDynamicLSTM():
 
                 # logging.info(f"\n\n====================     EPOCH {epoch}     ====================")        
                 batch_idx = 0
-                time_batch_all = []
+                # time_batch_all = []
                 for batch in dataloader_train:
                     # time_batch_start = time.time()
                     # self.util_printer.print_green(f'Batch: {batch_idx}')
@@ -481,7 +482,7 @@ class NAEDynamicLSTM():
 
                 if epoch % self.save_interval == 0:
                     self.save_model(epoch, len(data_train), start_t, loss_all_log)
-                traing_time = time.time() - start_t
+                time_train_epoch = time.time() - time_start_epoch
                 
 
 
@@ -501,10 +502,12 @@ class NAEDynamicLSTM():
                 
                 torch.cuda.empty_cache()
                 
-                validate_time = time.time() - start_t - traing_time
+                time_valid_epoch = time.time() - time_start_epoch - time_train_epoch
+                time_total_epoch = time.time() - time_start_epoch   # training speed of this epoch
         
                 # 3. ----- FOR WANDB LOG -----
                 if enable_wandb:
+                    total_traing_time = time.time() - start_t
                     wandb.log({
                         "training_loss1": loss_1_train_log,
                         "training_loss2": loss_2_train_log,
@@ -517,23 +520,25 @@ class NAEDynamicLSTM():
                         "valid_mean_nade_future": mean_nade_future,
                         "valid_mean_final_step_err": mean_final_step_err,
                         "valid_capture_success_rate": capture_success_rate,
-                        "training_time_mins": traing_time/60,
-                        "learning_rate": self.optimizer.param_groups[0]['lr']
+                        "training_time_mins": total_traing_time/60,
+                        "learning_rate": self.optimizer.param_groups[0]['lr'],
+                        "training speed (s/epoch)": time_total_epoch,
                         },
                         step=epoch
                     )
 
                 if (epoch) % 1 == 0:
                     self.util_printer.print_green(f'Epoch [{epoch}/{self.num_epochs}]', background=False)
-                    total_time = time.time() - start_t
-                    print(f'    Training speed:     {total_time/(epoch+1):.3f} s/epoch')
-                    print(f'    Training time left: {(self.num_epochs - (epoch+1)) * total_time/(epoch+1)/60:.2f} mins')
-                    print(f'    training time %:    {traing_time/total_time:.2f} mins')
-                    print(f'    Validation time %:  {validate_time/total_time:.2f} mins')
+                    run_time_total = time.time() - start_t
+                    print(f'    Training speed:     {time_total_epoch:.3f} s/epoch')
+                    print(f'    Training time left: {(self.num_epochs - (epoch+1)) * time_total_epoch/3600:.2f} hours')
+                    print(f'    training time %:    {time_train_epoch/time_total_epoch:.2f}')
+                    print(f'    Validation time %:  {time_valid_epoch/time_total_epoch:.2f}')
                     print(f'    Loss:               {loss_total_train_log:.6f}')
                     print(f'    learning rate:      {self.optimizer.param_groups[0]["lr"]}')
                     print('\n-----------------------------------')
-                self.scheduler.step()
+                if epoch < self.warmup_steps:
+                    self.scheduler.step()
 
         finally:
             if debug:
