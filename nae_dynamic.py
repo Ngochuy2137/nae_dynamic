@@ -97,9 +97,9 @@ class VLSLSTM(nn.Module):
     '''
     Variable-Length Sequence LSTM class
     '''
-    def __init__(self, input_size, hidden_size, num_layers):
+    def __init__(self, input_size, hidden_size, num_layers, dropout_rate):
         super(VLSLSTM, self).__init__()
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers=num_layers, batch_first=True)
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers=num_layers, batch_first=True, dropout=dropout_rate)
         self.num_layers = num_layers
         self.hidden_size = hidden_size
 
@@ -224,7 +224,7 @@ class VLSLSTM(nn.Module):
 #------------------------- TRAINING -------------------------
 class NAEDynamicLSTM():
     def __init__(self, input_size, hidden_size, output_size, num_layers_lstm, lr, 
-                 num_epochs, batch_size_train, batch_size_val, save_interval, thrown_object, warmup_steps=0,
+                 num_epochs, batch_size_train, batch_size_val, save_interval, thrown_object, dropout_rate, warmup_steps=0,
                  device=torch.device('cuda'),
                  data_dir=''):
         self.utils = NAE_Utils()
@@ -234,6 +234,7 @@ class NAEDynamicLSTM():
         self.hidden_size = hidden_size
         self.num_layers = num_layers_lstm
         self.lr = lr
+        self.dropout_rate = dropout_rate
 
         # training params
         self.num_epochs = num_epochs
@@ -252,7 +253,7 @@ class NAEDynamicLSTM():
 
         # Initialize model, loss, optimizer
         self.encoder = Encoder(input_size, hidden_size).to(device)
-        self.vls_lstm = VLSLSTM(hidden_size, hidden_size, num_layers_lstm).to(device)
+        self.vls_lstm = VLSLSTM(hidden_size, hidden_size, num_layers_lstm, dropout_rate=dropout_rate).to(device)
         self.decoder = Decoder(hidden_size, output_size).to(device)
 
         self.criterion = nn.MSELoss(reduction='none').to(device)  # NOTE: Reduction 'none' to apply masking, default is 'mean'
