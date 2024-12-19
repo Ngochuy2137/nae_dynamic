@@ -224,7 +224,7 @@ class VLSLSTM(nn.Module):
 #------------------------- TRAINING -------------------------
 class NAEDynamicLSTM():
     def __init__(self, input_size, hidden_size, output_size, num_layers_lstm, lr, 
-                 num_epochs, batch_size_train, batch_size_val, save_interval, thrown_object, dropout_rate, warmup_steps=0,
+                 num_epochs, batch_size_train, batch_size_val, save_interval, thrown_object, dropout_rate, warmup_steps=0, loss2_weight=1.0, loss2_1_weight=0.0,
                  device=torch.device('cuda'),
                  data_dir=''):
         self.utils = NAE_Utils()
@@ -244,6 +244,8 @@ class NAEDynamicLSTM():
         self.thrown_object = thrown_object + '_model'
         self.data_dir = data_dir
         self.warmup_steps = warmup_steps
+        self.loss2_weight = loss2_weight
+        self.loss2_1_weight = loss2_1_weight
 
         self.run_name = f"NAE_DYNAMIC-model_{datetime.now().strftime('%d-%m-%Y_%H-%M-%S')}_hiddensize{hidden_size}"
 
@@ -417,6 +419,17 @@ class NAEDynamicLSTM():
                             if mask_aureg.sum() != 0:
                                 loss_2_mean = loss_2_mask.sum() / mask_aureg.sum()
 
+                            ## ----- LOSS 2-1: Last point error -----
+                            mask_aureg_int = mask_aureg.int()
+                            last_indices = mask_aureg_int.flip(dims=[1]).argmax(dim=1)
+                            last_indices = mask_aureg_int.size(1) - 1 - last_indices
+                            mask_last_point = torch.zeros_like(mask_aureg_int, dtype=torch.bool)
+                            mask_last_point[torch.arange(mask_aureg_int.size(0), device=mask_aureg_int.device), last_indices] = 1
+                            loss_2_1_mask = loss_2 * mask_last_point
+                            loss_2_1_mean = 0
+                            if mask_last_point.sum() != 0:
+                                loss_2_1_mean = loss_2_1_mask.sum() / mask_last_point.sum()
+
                             ## ----- LOSS 3: RECONSTRUCTION -----
                             loss_3 = self.criterion(self.decoder(inputs_lstm), labels_reconstruction_pad).sum(dim=-1)
                             loss_3_mask = loss_3 * mask_reconstruction
@@ -424,7 +437,7 @@ class NAEDynamicLSTM():
                             if mask_reconstruction.sum() != 0:
                                 loss_3_mean = loss_3_mask.sum() / mask_reconstruction.sum()
                             
-                            loss_mean = loss_1_mean + loss_2_mean + loss_3_mean
+                            loss_mean = loss_1_mean + self.loss2_weight*loss_2_mean + loss_3_mean + self.loss2_1_weight * loss_2_1_mean
 
                             # time_flag_3 = time.time() # loss cal time
 
