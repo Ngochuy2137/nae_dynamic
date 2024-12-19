@@ -411,6 +411,9 @@ class NAEDynamicLSTM():
                             loss_1_mean = 0
                             if mask_teafo.sum() != 0:
                                 loss_1_mean = loss_1_mask.sum() / mask_teafo.sum()
+                            else:
+                                self.util_printer.print_red(f'Loss 1 - mask_teafo.sum() == 0')
+                                input('DEBUG')
 
                             ## ----- LOSS 2: AUTOREGRESSIVE -----
                             loss_2 = self.criterion(output_aureg_pad_de, labels_aureg_pad).sum(dim=-1)
@@ -418,6 +421,10 @@ class NAEDynamicLSTM():
                             loss_2_mean = 0
                             if mask_aureg.sum() != 0:
                                 loss_2_mean = loss_2_mask.sum() / mask_aureg.sum()
+                            else:
+                                self.util_printer.print_red(f'Loss 2 - mask_aureg.sum() == 0')
+                                input('DEBUG')
+
 
                             ## ----- LOSS 2-1: Last point error -----
                             mask_aureg_int = mask_aureg.int()
@@ -429,6 +436,10 @@ class NAEDynamicLSTM():
                             loss_2_1_mean = 0
                             if mask_last_point.sum() != 0:
                                 loss_2_1_mean = loss_2_1_mask.sum() / mask_last_point.sum()
+                            else:
+                                self.util_printer.print_red(f'Loss 2-1 - mask_last_point.sum() == 0')
+                                input('DEBUG')
+
 
                             ## ----- LOSS 3: RECONSTRUCTION -----
                             loss_3 = self.criterion(self.decoder(inputs_lstm), labels_reconstruction_pad).sum(dim=-1)
@@ -436,6 +447,10 @@ class NAEDynamicLSTM():
                             loss_3_mean = 0
                             if mask_reconstruction.sum() != 0:
                                 loss_3_mean = loss_3_mask.sum() / mask_reconstruction.sum()
+                            else:
+                                self.util_printer.print_red(f'Loss 3 - mask_reconstruction.sum() == 0')
+                                input('DEBUG')
+
                             
                             loss_mean = loss_1_mean + self.loss2_weight*loss_2_mean + loss_3_mean + self.loss2_1_weight * loss_2_1_mean
 
