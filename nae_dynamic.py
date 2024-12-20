@@ -25,7 +25,7 @@ import psutil  # Thư viện để theo dõi CPU, RAM
 from datetime import datetime
 import sys
 import traceback
-from torch.amp import autocast, GradScaler
+from torch.cuda.amp import autocast, GradScaler
 
 printer_global = Printer()
 
@@ -224,7 +224,7 @@ class VLSLSTM(nn.Module):
 #------------------------- TRAINING -------------------------
 class NAEDynamicLSTM():
     def __init__(self, input_size, hidden_size, output_size, num_layers_lstm, lr, 
-                 num_epochs, batch_size_train, batch_size_val, save_interval, thrown_object, dropout_rate, warmup_steps=0, loss2_weight=1.0, loss2_1_weight=0.0,
+                 num_epochs, batch_size_train, batch_size_val, save_interval, thrown_object, dropout_rate, warmup_steps=0, loss2_weight=1.0, loss2_1_weight=0.0, weight_decay=1e-4,
                  device=torch.device('cuda'),
                  data_dir=''):
         self.utils = NAE_Utils()
@@ -261,7 +261,7 @@ class NAEDynamicLSTM():
         self.criterion = nn.MSELoss(reduction='none').to(device)  # NOTE: Reduction 'none' to apply masking, default is 'mean'
         # self.optimizer = optim.Adam(list(self.encoder.parameters()) + list(self.vls_lstm.parameters()) + list(self.decoder.parameters()), lr=lr)
         
-        weight_decay = 1e-4
+        self.weight_decay = weight_decay
         # Định nghĩa các tham số không áp dụng Weight Decay (bias, LayerNorm.weight)
         no_decay = ['bias', 'LayerNorm.weight']
         # Tách các tham số
@@ -396,7 +396,7 @@ class NAEDynamicLSTM():
 
 
                         # time_flag_1 = time.time() # load data time
-                        with autocast(device_type='cuda'):
+                        with autocast():
                             inputs_lstm = self.encoder(inputs_pad)
                             outputs_teafo_pad, output_aureg_pad = self.vls_lstm(inputs_lstm, lengths_teafo, lengths_aureg, mask_aureg)
                             output_teafo_pad_de = self.decoder(outputs_teafo_pad)
