@@ -20,12 +20,18 @@ def main():
 
     # Training parameters 
     training_params = {
-        'num_epochs': 5000,
-        'batch_size_train': 256,    
+        'num_epochs': 2500,
+        'batch_size_train': 512,    
         'batch_size_val': 1024,
         'save_interval': 10,
-        'thrown_object' : thrown_object + '-dynamic-len',
-        'warmup_steps': 25
+        'thrown_object' : 'Done-Finetune-' + thrown_object,
+        'train_id': 'after-finetune-gourd',
+        'warmup_steps': 25,
+        'dropout_rate': 0.0,
+        'loss2_weight': 1.0,
+        'loss2_1_weight': 0.0,
+        'weight_decay': 0.0001,
+        'lstm_bidirectional': False
     }
     # Model parameters
     model_params = {
@@ -35,6 +41,13 @@ def main():
         'num_layers_lstm': 2,
         'lr': 0.0001
     }
+    wdb_notes = f'lr: {model_params["lr"]}, \
+                {training_params["loss2_weight"]}*L2: ,  \
+                {training_params["loss2_1_weight"]}*L2_1, \
+                warmup {training_params["warmup_steps"]}, \
+                dropout: {training_params["dropout_rate"]}, \
+                weight_decay: {training_params["weight_decay"]}, \
+                lstm_bidirectional: {training_params["lstm_bidirectional"]}'
 
     nae = NAEDynamicLSTM(**model_params, **training_params, data_dir=data_dir, device=device)
     # load data
@@ -62,7 +75,6 @@ def main():
     # data_train = data_train[:128]
     # data_val = data_val[:128]
     nae.util_printer.print_green('Start training ...', background=True)
-    wdb_notes = f'NAE_DYNAMIC - {model_params["num_layers_lstm"]} LSTM layers, {model_params["hidden_size"]} hidden size, lr={model_params["lr"]}, batch_size={training_params["batch_size_train"]}'
     if enable_wandb:
         nae.init_wandb('nae-dynamic', run_id=wdb_run_id, resume=wdb_resume, wdb_notes=wdb_notes)
     saved_model_dir = nae.train(data_train, data_val, checkpoint_path=checkout_path, enable_wandb=enable_wandb, 
