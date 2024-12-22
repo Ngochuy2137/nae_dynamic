@@ -11,6 +11,7 @@ import wandb
 from datetime import datetime
 import os
 import time
+import re
 
 from python_utils.printer import Printer
 from python_utils.plotter import Plotter
@@ -224,7 +225,7 @@ class VLSLSTM(nn.Module):
 #------------------------- TRAINING -------------------------
 class NAEDynamicLSTM():
     def __init__(self, input_size, hidden_size, output_size, num_layers_lstm, lr, 
-                 num_epochs, batch_size_train, batch_size_val, save_interval, thrown_object, dropout_rate, warmup_steps=0, loss2_weight=1.0, loss2_1_weight=0.0, weight_decay=1e-4,
+                 num_epochs, batch_size_train, batch_size_val, save_interval, thrown_object, train_id, dropout_rate, warmup_steps=0, loss2_weight=1.0, loss2_1_weight=0.0, weight_decay=1e-4,
                  device=torch.device('cuda'),
                  data_dir=''):
         self.utils = NAE_Utils()
@@ -247,7 +248,7 @@ class NAEDynamicLSTM():
         self.loss2_weight = loss2_weight
         self.loss2_1_weight = loss2_1_weight
 
-        self.run_name = f"NAE_DYNAMIC-model_{datetime.now().strftime('%d-%m-%Y_%H-%M-%S')}_hiddensize{hidden_size}"
+        self.run_name = f"{train_id}-model_{datetime.now().strftime('%d-%m-%Y_%H-%M-%S')}_hiddensize{hidden_size}"
 
         # get dir of folder including this script
         cur_dir = os.path.dirname(os.path.realpath(__file__))
@@ -521,7 +522,7 @@ class NAEDynamicLSTM():
                     mean_loss_total_val_log, \
                     mean_ade_entire, mean_ade_future, \
                     mean_nade_entire, mean_nade_future, \
-                    mean_final_step_err, capture_success_rate = self.validate_and_score(data=data_val, batch_size=self.batch_size_val, shuffle=False, epoch=epoch)
+                    mean_final_step_err, var_fe, final_err_var_penalty, capture_success_rate = self.validate_and_score(data=data_val, batch_size=self.batch_size_val, shuffle=False, epoch=epoch)
                 except RuntimeError as e:
                     # logging.error("Epoch {epoch} - VAL      RuntimeError during validation!") if debug else None
                     # logging.error("Epoch {epoch} - VAL      Error message: %s", str(e)) if debug else None
@@ -548,7 +549,9 @@ class NAEDynamicLSTM():
                         "valid_mean_nade_entire": mean_nade_entire,
                         "valid_mean_nade_future": mean_nade_future,
                         "valid_mean_final_step_err": mean_final_step_err,
+                        "valid_var_fe": var_fe,
                         "valid_capture_success_rate": capture_success_rate,
+                        "final_err_var_penalty": final_err_var_penalty,
                         "training_time_mins": total_traing_time/60,
                         "learning_rate": self.optimizer.param_groups[0]['lr'],
                         "training speed (s/epoch)": time_total_epoch,
@@ -683,8 +686,8 @@ class NAEDynamicLSTM():
         return model_dir
 
     def validate_and_score(self, data, batch_size, shuffle=False, inference=False, epoch=''):
-
-        dataloader = TorchDataLoader(data, batch_size=batch_size, collate_fn=lambda x: self.collate_pad_fn(x), shuffle=shuffle)
+        self.util_printer.print_green(f'Validating: {len(data)} samples')
+        dataloader = TorchDataLoader(data, batch_size=len(data), collate_fn=lambda x: self.collate_pad_fn(x), shuffle=shuffle)
         self.vls_lstm.eval()
         self.encoder.eval()
         self.decoder.eval()
@@ -692,18 +695,19 @@ class NAEDynamicLSTM():
         loss_total_log = 0.0
         # sum_mse_all = 0.0
         # sum_mse_xyz = 0.0
-        sum_ade_entire = 0.0
-        sum_ade_future = 0.0
-        sum_nade_entire = 0.0
-        sum_nade_future = 0.0
-        sum_final_step_err = 0.0
-        sum_capture_success_rate = 0.0
+        # mean_ade_entire = None
+        # mean_ade_future = None
+        # mean_nade_entire = None
+        # mean_nade_future = None
+        # mean_final_step_err = None
+        # mean_capture_success_rate = None
+        # final_err_var_penalty = None
 
         if inference:
             predicted_seqs_all = []
             label_seqs_all = []
         with torch.no_grad():
-            for batch in dataloader:
+            for batch in dataloader:    # because we feed all data at once so there is only 1 batch
                 (inputs_pad, lengths_in, mask_in), \
                 (labels_teafo_pad, lengths_teafo, mask_teafo), \
                 (labels_aureg_pad, lengths_aureg, mask_aureg),\
@@ -732,7 +736,7 @@ class NAEDynamicLSTM():
                     
                     predicted_seqs_all.extend(predicted_seqs)
                     label_seqs_all.extend(label_seqs)
-                    continue
+                    # continue
                 
                 ##  ----- LOSS 1: TEACHER FORCING -----
                 loss_1 = self.criterion(output_teafo_pad_de, labels_teafo_pad).sum(dim=-1)  # Shape: (batch_size, max_seq_len_out)
@@ -780,40 +784,24 @@ class NAEDynamicLSTM():
 
 
                 ## ----- SCORE -----
-                (mean_ade_entire_b, var_ade_entire_b), \
-                (mean_ade_future_b, var_ade_future_b), \
-                (mean_nade_entire_b, var_nade_entire_b), \
-                (mean_nade_future_b, var_nade_future_b), \
-                (mean_final_step_err_b, var_fe_b), \
-                (mean_capture_success_rate_b, var_capture_success_rate) \
+                (mean_ade_entire, var_ade_entire), \
+                (mean_ade_future, var_ade_future), \
+                (mean_nade_entire, var_nade_entire), \
+                (mean_nade_future, var_nade_future), \
+                (mean_final_step_err, var_fe, final_err_var_penalty), \
+                (mean_capture_success_rate, var_capture_success_rate) \
                 = self.utils.score_all_predictions(output_teafo_pad_de, labels_teafo_pad, lengths_teafo, mask_teafo, 
                                                     output_aureg_pad_de, labels_aureg_pad, lengths_aureg, mask_aureg,
                                                     capture_thres=0.1)
-                # because MSE divides by batch_size, but we need to sum all to get the total loss and calculate the mean value ourselves, 
-                # so in each batch we need to multiply by batch_size
-                current_batch_size = len(inputs_pad)
-
-                # sum_mse_all += batch_mean_mse_all*current_batch_size
-                # sum_mse_xyz += batch_mean_mse_xyz*current_batch_size
-                sum_ade_entire += mean_ade_entire_b*current_batch_size
-                sum_ade_future += mean_ade_future_b*current_batch_size
-                sum_nade_entire += mean_nade_entire_b*current_batch_size
-                sum_nade_future += mean_nade_future_b*current_batch_size
-                sum_final_step_err += mean_final_step_err_b*current_batch_size
-                sum_capture_success_rate += mean_capture_success_rate_b*current_batch_size
+                
+                print('-----------------final_err_var_penalty: ', final_err_var_penalty)
         
         if inference:
-            return predicted_seqs_all, label_seqs_all
+            return predicted_seqs_all, label_seqs_all, final_err_var_penalty
         # get mean value of scored data
         mean_loss_total_log = loss_total_log/len(dataloader.dataset)
-        mean_ade_entire = sum_ade_entire/len(dataloader.dataset)
-        mean_ade_future = sum_ade_future/len(dataloader.dataset)
-        mean_nade_entire = sum_nade_entire/len(dataloader.dataset)
-        mean_nade_future = sum_nade_future/len(dataloader.dataset)
-        mean_final_step_err = sum_final_step_err/len(dataloader.dataset)
-        capture_success_rate = sum_capture_success_rate/len(dataloader.dataset)
         
-        return mean_loss_total_log, mean_ade_entire, mean_ade_future, mean_nade_entire, mean_nade_future, mean_final_step_err, capture_success_rate
+        return mean_loss_total_log, mean_ade_entire, mean_ade_future, mean_nade_entire, mean_nade_future, mean_final_step_err, var_fe, final_err_var_penalty, mean_capture_success_rate
 
     def concat_output_seq(self, out_seq_teafo, out_seq_aureg):
         # Nối 2 chuỗi đầu ra (dọc theo chiều thời gian - dim=1)
@@ -834,6 +822,13 @@ class NAEDynamicLSTM():
             
         return concatenated_seq
 
+    def extract_epoch_idx(self, path):
+        # Sử dụng regex để tìm số epoch từ đường dẫn
+        match = re.search(r'epochs(\d+)_', path)
+        if match:
+            return int(match.group(1))
+        return None
+    
     def load_model(self, model_weights_dir, weights_only=False):
         encoder_model_path = self.utils.look_for_file(model_weights_dir, 'encoder_model.pth')
         lstm_model_path = self.utils.look_for_file(model_weights_dir, 'lstm_model.pth')
@@ -847,6 +842,9 @@ class NAEDynamicLSTM():
 
         self.decoder.load_state_dict(torch.load(decoder_model_path, weights_only=weights_only))
         self.decoder.to(self.device)
+        epoch_idx = self.extract_epoch_idx(model_weights_dir)
+        return epoch_idx
+    
     def data_correction_check(self, data_train, data_val, data_test):
         data_collection_checker = RoCatRLDataRawCorrectionChecker()
         print('Checking data correction ...')
