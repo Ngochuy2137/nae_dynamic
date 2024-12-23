@@ -13,9 +13,9 @@ def main():
     data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/nae_paper_dataset/new_data_format/bottle/split/bottle'
     thrown_object = 'bottle'
     
-    checkout_path = None
-    wdb_run_id=None   # 't5nlloi0'
-    wdb_resume=None   # 'allow'
+    checkout_path = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/Done-Finetune-bottle_model/after-finetune-gourd-model_22-12-2024_20-52-22_hiddensize128/epochs1120_data9262_batchsize512_hiddensize128_timemin31-46_NAE_DYNAMIC/midway_checkpoint/checkpoint.pth'
+    wdb_run_id='kgiprru0'   # 't5nlloi0'
+    wdb_resume='allow'   # 'allow'
     enable_wandb = True
 
     # Training parameters 
@@ -25,13 +25,12 @@ def main():
         'batch_size_val': 1024,
         'save_interval': 10,
         'thrown_object' : 'Done-Finetune-' + thrown_object,
-        'train_id': 'after-finetune-gourd',
+        'train_id': f'{thrown_object}',
         'warmup_steps': 25,
         'dropout_rate': 0.0,
         'loss2_weight': 1.0,
         'loss2_1_weight': 0.0,
         'weight_decay': 0.0001,
-        'lstm_bidirectional': False
     }
     # Model parameters
     model_params = {
@@ -46,8 +45,7 @@ def main():
                 {training_params["loss2_1_weight"]}*L2_1, \
                 warmup {training_params["warmup_steps"]}, \
                 dropout: {training_params["dropout_rate"]}, \
-                weight_decay: {training_params["weight_decay"]}, \
-                lstm_bidirectional: {training_params["lstm_bidirectional"]}'
+                weight_decay: {training_params["weight_decay"]}'
 
     nae = NAEDynamicLSTM(**model_params, **training_params, data_dir=data_dir, device=device)
     # load data

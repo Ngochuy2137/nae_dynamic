@@ -25,13 +25,12 @@ def main():
         'batch_size_val': 1024,
         'save_interval': 10,
         'thrown_object' : 'Done-Finetune-' + thrown_object,
-        'train_id': 'after-finetune-gourd',
+        'train_id': f'{thrown_object}',
         'warmup_steps': 25,
         'dropout_rate': 0.0,
         'loss2_weight': 1.0,
         'loss2_1_weight': 0.0,
         'weight_decay': 0.0001,
-        'lstm_bidirectional': False
     }
     # Model parameters
     model_params = {
@@ -46,8 +45,7 @@ def main():
                 {training_params["loss2_1_weight"]}*L2_1, \
                 warmup {training_params["warmup_steps"]}, \
                 dropout: {training_params["dropout_rate"]}, \
-                weight_decay: {training_params["weight_decay"]}, \
-                lstm_bidirectional: {training_params["lstm_bidirectional"]}'
+                weight_decay: {training_params["weight_decay"]}'
 
     nae = NAEDynamicLSTM(**model_params, **training_params, data_dir=data_dir, device=device)
     # load data
