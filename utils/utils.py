@@ -152,7 +152,7 @@ class NAE_Utils:
         ## =================== Final point Calculation ===================
         #       Calculate final step error
         #       Find the final valid step of each trajectory in batch based on mask
-        final_step_err = self.final_step_prediction_error(output_combined, labels_combined, mask_combined)
+        final_step_err, final_err_var_penalty = self.final_step_prediction_error(output_combined, labels_combined, mask_combined, mask_aureg)
 
         ## =================== Synthesis all results ===================
         # Calculate mean values of all predictions
@@ -184,7 +184,7 @@ class NAE_Utils:
                 (mean_ade_future, var_ade_future), \
                 (mean_nade_entire, var_nade_entire), \
                 (mean_nade_future, var_nade_future), \
-                (mean_final_step_err, var_fe), \
+                (mean_final_step_err, var_fe, final_err_var_penalty), \
                 (mean_capture_success_rate, var_capture_success_rate)
     
     
@@ -222,7 +222,7 @@ class NAE_Utils:
         
         return nade
     
-    def final_step_prediction_error(self, predictions, labels, mask_combined):
+    def final_step_prediction_error(self, predictions, labels, mask_combined, mask_aureg):
         batch_size = mask_combined.size(0)
         step_size = mask_combined.size(1)
         # Tìm step cuối cùng
@@ -234,7 +234,51 @@ class NAE_Utils:
         final_label = labels[batch_indices, last_valid_step, :3]  # [batch_size, dim]
 
         l2_error = torch.norm(final_prediction - final_label, dim=1)  # [batch_size]
-        return l2_error
+        # calculate sum of each row in mask_aureg
+        length_left = torch.sum(mask_aureg, dim=1)
+
+        # calculate penalty for variance of length_left
+        final_err_var_penalty = self.calculate_penalty_metric(l2_error, length_left)
+
+        return l2_error, final_err_var_penalty
+
+    def calculate_penalty_metric(self, errors, steps):
+        """
+        Calculate penalty-based metric to evaluate errors based on steps using PyTorch.
+
+        Args:
+        - errors (torch.Tensor): Tensor of errors for each prediction step.
+        - steps (torch.Tensor): Tensor of step indices corresponding to errors.
+        - device (str): Device to perform calculations ("cuda" for GPU, "cpu" for CPU).
+
+        Returns:
+        - metric (float): Normalized penalty-based metric in [0, 1].
+        """
+        # check if errors and steps have the same length
+        if errors.size(0) != steps.size(0):
+            raise ValueError("errors and steps must have the same length.")
+        # Sắp xếp errors và steps theo thứ tự tăng dần của steps
+        sorted_indices = torch.argsort(steps)
+        steps = steps[sorted_indices]
+        errors = errors[sorted_indices]
+
+        # Tính trọng số ngược tỉ lệ với step
+        max_step = steps.max()
+        weights = (max_step - steps + 1) / max_step  # Trọng số
+        # # weights = 5/(steps + 1)  # Trọng số
+        # weights = torch.exp(-50 * steps)
+
+
+        # Tính penalty
+        penalties = weights * errors
+        total_penalty = penalties.sum()
+
+        # Chuẩn hóa penalty
+        max_possible_penalty = weights.sum() * errors.max()
+        metric = 1 - total_penalty / max_possible_penalty
+
+        # Trả kết quả về CPU dưới dạng float
+        return metric.item()
 
     def prepare_data_loaders(self, data_train, data_val, batch_size_train, batch_size_val):
         #   prepare training data
