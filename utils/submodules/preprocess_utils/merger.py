@@ -1,6 +1,6 @@
 import numpy as np
-from nae.utils.submodules.preprocess_utils.data_raw_reader import RoCatRLLabDataRawReader, RoCatNAEDataRawReader
-from nae.utils.submodules.plotter import RoCatDataPlotter
+from nae_core.utils.submodules.preprocess_utils.data_raw_reader import RoCatRLLabDataRawReader, RoCatNAE_coreDataRawReader
+from nae_core.utils.submodules.plotter import RoCatDataPlotter
 import os
 
 class RoCatRLLabDataMerger:

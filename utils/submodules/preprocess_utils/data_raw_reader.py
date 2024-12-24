@@ -15,6 +15,8 @@ from python_utils.plotter import Plotter
 DEBUG = False
 np.set_printoptions(suppress=True)
 
+global_util_printer = Printer()
+
 class RoCatNAEDataRawReader:
     def __init__(self, file_path):
         self.trajectories = self.load_data(file_path)
@@ -39,21 +41,38 @@ class RoCatNAEDataRawReader:
 class RoCatRLLabDataRawReader:
     def __init__(self, file_path):
         self.file_path = file_path
-        self.trajectories = np.load(self.file_path, allow_pickle=True)
-        print('Loaded file with ', len(self.trajectories['trajectories']), ' trajectories')
+        if file_path.endswith('.npy'):
+            data_raw = np.load(file_path, allow_pickle=True)
+        elif file_path.endswith('.npz'):
+            data = np.load(self.file_path, allow_pickle=True)
 
-        self.colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
-        self.fig = plt.figure()
-        self.ax = self.fig.add_subplot(111, projection='3d')
-        self.ax.set_xlabel('X')
-        self.ax.set_ylabel('Y')
-        self.ax.set_zlabel('Z')
-        self.ax.set_title('Trajectory of the object')
-        # self.ax.set_box_aspect([1,1,1])
-        self.ax.view_init(elev=20, azim=30)
+        self.data_raw = data['trajectories']        # including 'points', 'msg_ids', 'time_stamps', 'low_freq_num' fields
+        if 'object_name' in self.data_raw:
+            self.object_name = data['object_name']
+        else:
+            self.object_name = 'unknown'
+        
+        global_util_printer.print_green(f'Loaded file with {len(self.data_raw)} trajectories')
 
-    def read(self):
-        return self.trajectories['trajectories']
+    '''
+    Return only the 'points'/'position' field of the data
+    '''
+    def read_position_data(self):
+        if 'points' in self.data_raw[0]:     # dict_keys(['points', 'msg_ids', 'time_stamps', 'low_freq_num'])
+            key = 'points'
+        elif 'position' in self.data_raw[0]:
+            key = 'position'
+        else:
+            global_util_printer.print_red('[RoCatRLLabDataRawReader] Key not found in self.data_raw', background=True)
+            raise ValueError()
+        data_positions = [traj[key] for traj in self.data_raw]
+        return data_positions
+    
+    '''
+    Return all fields of the data
+    '''
+    def read_raw_data(self):
+        return self.data_raw
     
 # main
 if __name__ == '__main__':

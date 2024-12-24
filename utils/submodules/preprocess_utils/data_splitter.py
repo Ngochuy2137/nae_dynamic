@@ -1,6 +1,6 @@
 import numpy as np
 import os
-from data_raw_reader import RoCatRLLabDataRawReader
+from .data_raw_reader import RoCatRLLabDataRawReader
 
 class RoCatDataSplitter:
     def __init__(self, data_raw, train_ratio=0.8, val_ratio=0.1, num_first_points_to_cut=0, object_name=None):
@@ -32,7 +32,7 @@ class RoCatDataSplitter:
         # get current directory, parent directory, and save folder
         current_dir = os.path.dirname(os.path.realpath(__file__))
         parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
-        self.output_data_dir = os.path.join(parent_dir, 'data', 'split', self.object_name)
+        self.output_data_dir = os.path.join(parent_dir, 'data', self.object_name, 'split')
         if not os.path.exists(self.output_data_dir):
             os.makedirs(self.output_data_dir)
 

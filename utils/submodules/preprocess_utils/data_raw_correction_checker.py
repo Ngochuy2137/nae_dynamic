@@ -21,7 +21,7 @@ class RoCatRLDataRawCorrectionChecker:
     check if the interpolation is correct
     Get 10 random trajectories from the trajectory and check if the velocity is correct
     '''
-    def check_data_correction(self, data, new_data_format=False):
+    def check_data_correction(self, data, data_whose_y_up=False):
         '''
         check swap_yz: If the data is swapped y and z, g should be the 8th element in one point
         get 10 random trajectories
@@ -45,6 +45,7 @@ class RoCatRLDataRawCorrectionChecker:
         indices = random.sample(range(len(data)), sample_size)
 
         count = 0
+        is_incorrect_data = False
         for i in indices:
             # print a random point to check
             # print in blue background
@@ -56,19 +57,28 @@ class RoCatRLDataRawCorrectionChecker:
             print('     - Point:        ', data[i]['points'][point_random_idx])
             # print('     - Orientation:  ', data[i]['orientations'][point_random_idx])
             print('     - Timestamp:    ', data[i]['time_stamps'][point_random_idx])
-            result_feature_check, msg = self.check_feature_correction(data[i], new_data_format)
+
+            data_i = data[i]['points']
+            result_feature_check, msg = self.check_feature_correction(data_i, data_whose_y_up)
             if not result_feature_check:
                 # print in red
                 self.util_printer.print_red(f'[FEATURE CHECK] Trajectory {i} has incorrect data')
                 print('     ', msg)
+                is_incorrect_data = True
+                input('Press Enter to continue...')
             # print in green
             self.util_printer.print_green(f'[FEATURE CHECK]             Trajectory {i} has correct data')
         
             if not self.check_velocity_correction(data[i]):
                 print(f'\033[91m[VEL INTERPOLATION CHECK] Trajectory {i} has incorrect data')
+                is_incorrect_data = True
+                input('Press Enter to continue...')
             # print in green
             self.util_printer.print_green(f'[VEL INTERPOLATION CHECK]   Trajectory {i} has correct data')
-        
+        if not is_incorrect_data:
+            self.util_printer.print_green('-----> All data is correct')
+        else:
+            self.util_printer.print_red('-----> There are incorrect data')
             
     def check_feature_correction(self, one_trajectory, data_whose_y_up=False):
         '''
@@ -188,7 +198,7 @@ if __name__ == '__main__':
     file_path='/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_prediction_ws/src/nae/data/frisbee-pbl/frisbee-pbl_merged_275.npz'
     data_reader = RoCatRLLabDataRawReader(file_path)
     data_collection_checker = RoCatRLDataRawCorrectionChecker()
-    data_collection_checker.check_data_correction(data_reader.read(), new_data_format=True)
+    data_collection_checker.check_data_correction(data_reader.read(), data_whose_y_up=True)
 
     one_trajectory = data_reader.read()[1]
     print('check 111: ', one_trajectory['points'].shape)
