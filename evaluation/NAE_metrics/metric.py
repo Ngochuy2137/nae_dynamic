@@ -80,6 +80,18 @@ class Metric(ABC):
             for key, errors in grouped_data.items()
         ]
 
+        # for key, errors in grouped_data.items():
+        #     if key == 3:
+        #         print(f'{key}: {errors}')
+        #         mean_err = np.mean(errors)
+        #         deviations = np.abs(errors - mean_err)
+        #         # find index of max deviation
+        #         idx_max_dev = np.argmax(deviations)
+        #         print('total: ', len(errors))
+        #         print(f'idx_max_dev: {idx_max_dev}, err: {errors[idx_max_dev]}, dev: {deviations[idx_max_dev]}')
+
+        # input()
+
         # Sắp xếp kết quả
         if key_filter == 'len_left':
             result.sort(key=lambda x: x[key_filter], reverse=True)  # Sắp xếp giảm dần
@@ -126,7 +138,7 @@ class MetricAccumulatedError(Metric):
             accumulated_error_by_input_length.append(err_by_inlen) 
         return accumulated_error_by_input_length
     
-    def process_and_plot(self, input_seqs, label_seqs, predicted_seqs, id_traj, thrown_object, filter_value, filter_key='len_left'):
+    def process_and_plot(self, input_seqs, label_seqs, predicted_seqs, id_traj, thrown_object, filter_value, epoch_idx, filter_key='len_left'):
         # convert all elements of input_seqs to numpy
         input_seqs = [inp.cpu().numpy() for inp in input_seqs]
 
@@ -138,8 +150,8 @@ class MetricAccumulatedError(Metric):
         
         result_filtered = self.post_process(metric_result, key_filter=filter_key, value_filter=filter_value, filter_step=10, range_filter=(0, 70))
         plot = input('Do you want to plot trajectory [y/n] ? ')
-        save_plot = input('Do you want to save the plot [y/n] ? ')
-        if save_plot == 'y':
+        answer_plot = input('Do you want to save the plot [y/n] ? ')
+        if answer_plot == 'y':
             save_plot = True
         else:
             save_plot = False
@@ -163,7 +175,7 @@ class MetricAccumulatedError(Metric):
                                             font_size_label=20,
                                             font_size_tick=20,
                                             font_size_bar_val=15,
-                                            title=f'{thrown_object} - {filter_value} by input length - Trajectory #{id_traj}', 
+                                            title=f'{thrown_object} - {filter_value} by input length - #{id_traj} - EPOCH {epoch_idx}', 
                                             x_label=label_x, 
                                             y_label=label_y,
                                             legends=None,
@@ -203,7 +215,7 @@ class MetricGoalError(Metric):
             goal_error_by_length.append(err_by_inlen) 
         return goal_error_by_length
 
-    def process_and_plot(self, input_seqs, label_seqs, predicted_seqs, id_traj, thrown_object, filter_value, filter_key='len_left'):
+    def process_and_plot(self, input_seqs, label_seqs, predicted_seqs, id_traj, thrown_object, filter_value, epoch_idx, filter_key='len_left'):
         # convert all elements of input_seqs to numpy
         input_seqs = [inp.cpu().numpy() for inp in input_seqs]
 
@@ -215,8 +227,8 @@ class MetricGoalError(Metric):
         
         result_filtered = self.post_process(metric_result, key_filter=filter_key, value_filter=filter_value, filter_step=1, range_filter=(0, 80))
         plot = input('Do you want to plot trajectory [y/n] ? ')
-        save_plot = input('Do you want to save the plot [y/n] ? ')
-        if save_plot == 'y':
+        answer_plot = input('Do you want to save the plot [y/n] ? ')
+        if answer_plot == 'y':
             save_plot = True
         else:
             save_plot = False
@@ -239,11 +251,11 @@ class MetricGoalError(Metric):
                                             font_size_title=25,
                                             font_size_label=24,
                                             font_size_tick=20,
-                                            title=f'{thrown_object} - Impact point error - Trajectory #{id_traj}', 
+                                            title=f'{thrown_object} - Impact point error - Trajectory #{id_traj} - EPOCH {epoch_idx}', 
                                             x_label=label_x, 
                                             y_label=label_y,
                                             legends=None,
-                                            save_plot=True,
+                                            save_plot=save_plot,
                                             keep_source_order=True,
                                             std_display_mode='fill')
 

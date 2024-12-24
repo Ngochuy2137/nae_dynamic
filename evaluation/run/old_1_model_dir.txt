@@ -1,0 +1,74 @@
+    # -----------------------------------------------------
+    # ===================== BIDIRECTIONAL CHECK =====================
+    # -----------------------------------------------------
+    # # - Dropout: 0.0
+    # mother_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/Bidirect-gourd_model/after-finetune-gourd-model_23-12-2024_03-23-07_hiddensize128'
+    # epoch_idx = 1080  # 820 990 1080 
+    # saved_model_dir = glob.glob(f'{mother_dir}/*epochs{epoch_idx}*')[0]
+    # lstm_bidirectional = True
+    # # -----------------------------------------------------
+    # - Dropout: 0.1
+    mother_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/Bidirect-drour1e-1gourd_model/after-finetune-gourd-model_23-12-2024_08-37-56_hiddensize128'
+    epoch_idx = 1170  # 500/1020/1060/1170
+    saved_model_dir = glob.glob(f'{mother_dir}/*epochs{epoch_idx}*')[0]
+    lstm_bidirectional = True    
+    
+    
+    # ---------- Old models with torch 2.5 ----------
+    # parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/backup/bamboo/NAE_DYNAMIC-model_09-12-2024_19-35-08_hiddensize128'
+    # epoch_idx = 3630    # 2880 3400 3470 3630
+    # saved_model_dir = glob.glob(f'{parent_dir}/*epochs{epoch_idx}*')[0]
+    # lstm_bidirectional = False
+    
+    
+    # ---------- Torch 2.1 models ----------
+    # parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/Done-Finetune-bamboo_model/after-finetune-gourd-model_22-12-2024_17-20-21_hiddensize128'
+    # epoch_idx = 1680
+    # saved_model_dir = glob.glob(f'{parent_dir}/*epochs{epoch_idx}*')[0]
+
+    # ------ bidirectional model ------
+    # parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/Bidirect-bamboo_model/after-finetune-gourd-model_23-12-2024_02-02-49_hiddensize128'
+    # epoch_idx = 550 # 1690
+    # saved_model_dir = glob.glob(f'{parent_dir}/*epochs{epoch_idx}*')[0]
+    # lstm_bidirectional = True
+    
+    # # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/bamboo-dynamic-len_model/NAE_DYNAMIC-model_09-12-2024_19-35-08_hiddensize128/@epochs500_data14770_batchsize256_hiddensize128_timemin108-23_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/bamboo-dynamic-len_model/NAE_DYNAMIC-model_09-12-2024_19-35-08_hiddensize128/@epochs2880_data14770_batchsize256_hiddensize128_timemin626-51_NAE_DYNAMIC'
+
+    # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/nae_paper_dataset/new_data_format/banana/split/banana'
+    # thrown_object = 'banana'
+    # # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/banana-dynamic-len_model/NAE_DYNAMIC-model_10-12-2024_19-59-34_hiddensize128/@epochs450_data55011_batchsize256_hiddensize128_timemin211-94_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/banana-dynamic-len_model/NAE_DYNAMIC-model_10-12-2024_19-59-34_hiddensize128/@epochs880_data55011_batchsize256_hiddensize128_timemin504-96_NAE_DYNAMIC'
+
+    # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/nae_paper_dataset/new_data_format/bottle/split/bottle'
+    # thrown_object = 'bottle'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/bottle-dynamic-len_model/NAE_DYNAMIC-model_11-12-2024_14-09-03_hiddensize128/@epochs2660_data9262_batchsize256_hiddensize128_timemin312-51_NAE_DYNAMIC'
+
+       # -----------------------------------------------------
+    # ===================== L21 CHECK =====================
+    # -----------------------------------------------------
+    # ===== L21 * 0.0 =====
+    # - Lr: 0.0001
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-TORCH21-NEW_model/0-model_21-12-2024_04-57-06_hiddensize128/@epochs1420_data18616_batchsize512_hiddensize128_timemin137-09_NAE_DYNAMIC'
+
+    # ===== L21 * 1.0 =====
+    # - Lr: 0.00005
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-TORCH21-NEW_model/2-model_22-12-2024_05-01-52_hiddensize128/@epochs2490_data18616_batchsize512_hiddensize128_timemin241-5_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-TORCH21-NEW_model/2-model_22-12-2024_05-01-52_hiddensize128/epochs3060_data18616_batchsize512_hiddensize128_timemin55-29_NAE_DYNAMIC'
+    
+    # ===== L21 * 2.0 =====
+    # - Lr: 0.00005
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-TORCH21-NEW_model/1-model_21-12-2024_21-14-52_hiddensize128_lr5e-5_2L21/@epochs2170_data18616_batchsize512_hiddensize128_timemin212-28_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-TORCH21-NEW_model/1-model_21-12-2024_21-14-52_hiddensize128_lr5e-5_2L21/@epochs2670_data18616_batchsize512_hiddensize128_timemin16-45_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-TORCH21-NEW_model/1-model_21-12-2024_21-14-52_hiddensize128_lr5e-5_2L21/@epochs2900_data18616_batchsize512_hiddensize128_timemin38-9_NAE_DYNAMIC'
+    
+    
+    # -----------------------------------------------------
+    # ===================== L2 CHECK =====================
+    # -----------------------------------------------------
+    # ===== L2 * 1.5 =====
+    # - Lr: 0.00005
+    # mother_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-TORCH21-NEW_model/3-model_22-12-2024_04-51-48_hiddensize128'
+    # epoch_idx = 2070
+    # saved_model_dir = f'{mother_dir}/@epochs{epoch_idx}*'
+    # saved_model_dir = glob.glob(saved_model_dir)[0]

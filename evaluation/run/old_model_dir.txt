@@ -1,0 +1,104 @@
+# --------------------
+    #=====  lr=1e-4  =====
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_17-12-2024_16-45-31_hiddensize128_lr1e-4_retrain/@epochs2270_data18616_batchsize512_hiddensize128_timemin286-88_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_17-12-2024_16-45-31_hiddensize128_lr1e-4_retrain/@epochs1540_data18616_batchsize512_hiddensize128_timemin194-13_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_17-12-2024_16-45-31_hiddensize128_lr1e-4_retrain/@epochs1450_data18616_batchsize512_hiddensize128_timemin182-94_NAE_DYNAMIC'
+    
+    
+    # ---
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_18-12-2024_13-35-41_hiddensize128_lr1e-4_dropout_0-1/@epochs630_data18616_batchsize512_hiddensize128_timemin81-44_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_18-12-2024_13-35-41_hiddensize128_lr1e-4_dropout_0-1/@epochs800_data18616_batchsize512_hiddensize128_timemin102-79_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_18-12-2024_13-35-41_hiddensize128_lr1e-4_dropout_0-1/@epochs1230_data18616_batchsize512_hiddensize128_timemin156-75_NAE_DYNAMIC'
+    #       lr=1e-4 
+    #           DROPOUT 0.1
+
+    
+     # --------------------
+    #=====  lr=sqrt(2)*1e-4  =====  
+    # check 1
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_17-12-2024_01-02-28_hiddensize128_lrsqrt2e-4/@epochs1080_data18616_batchsize512_hiddensize128_timemin38-73_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_17-12-2024_13-27-30_hiddensize128/@epochs1200_data18616_batchsize512_hiddensize128_timemin53-74_NAE_DYNAMIC'
+    #       lr=sqrt(2)*1e-4 
+    #           DROPOUT 0.0
+    #              L2*1.0
+    # ---
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_19-12-2024_04-52-24_hiddensize128_lrsqrt2e-4_dropout_0-0-L21p5/@epochs940_data18616_batchsize512_hiddensize128_timemin59-13_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_19-12-2024_04-52-24_hiddensize128_lrsqrt2e-4_dropout_0-0-L21p5/@epochs1120_data18616_batchsize512_hiddensize128_timemin82-12_NAE_DYNAMIC'
+    #       lr=sqrt(2)*1e-4 
+    #           DROPOUT 0.0
+    #              L2*1.5
+    # ---
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_17-12-2024_23-03-24_hiddensize128_lrsqrt2e-4_dropout_0-1/@epochs680_data18616_batchsize512_hiddensize128_timemin85-22_NAE_DYNAMIC'
+    #       lr=sqrt(2)*1e-4 
+    #           DROPOUT 0.1
+    #              L2*1.0
+
+    # ---
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_18-12-2024_18-30-54_hiddensize128_lrsqrt2e-4_dropout_0-1-L21p5/@epochs360_data18616_batchsize512_hiddensize128_timemin46-23_NAE_DYNAMIC'
+    #       lr=sqrt(2)*1e-4 
+    #           DROPOUT 0.1 
+    #               L2*1.5
+
+    # ---
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_17-12-2024_02-50-48_hiddensize128_lrsqrt2e-4_dropout/@epochs580_data18616_batchsize512_hiddensize128_timemin48-26_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_17-12-2024_02-50-48_hiddensize128_lrsqrt2e-4_dropout/@epochs640_data18616_batchsize512_hiddensize128_timemin55-81_NAE_DYNAMIC'
+    #       lr=sqrt(2)*1e-4 
+    #           DROPOUT 0.3
+    #               L2*1.0
+
+
+
+    # --------------------
+    #=====  lr=2e-4  =====  
+    #           with any error
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_16-12-2024_18-49-01_hiddensize128_lr2e-4-any_err/@epochs760_data18616_batchsize512_hiddensize128_timemin96-55_NAE_DYNAMIC'
+    #           fixed any error
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_16-12-2024_21-49-14_hiddensize128_lr2e-4-fix_any_err/@epochs770_data18616_batchsize512_hiddensize128_timemin97-69_NAE_DYNAMIC'
+    
+    # ---
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_19-12-2024_09-10-45_hiddensize128_lr2e-4_dropout_0-0-L21p5/@epochs810_data18616_batchsize512_hiddensize128_timemin103-11_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_19-12-2024_09-10-45_hiddensize128_lr2e-4_dropout_0-0-L21p5/@epochs880_data18616_batchsize512_hiddensize128_timemin112-01_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_19-12-2024_09-10-45_hiddensize128/epochs850_data18616_batchsize512_hiddensize128_timemin108-19_NAE_DYNAMIC'
+    #       lr=2e-4 
+    #           DROPOUT 0.0
+    #               L2*1.5
+    # ---
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_19-12-2024_14-28-52_hiddensize128_lr2e-4_dropout_0-0-L22p0/@epochs950_data18616_batchsize512_hiddensize128_timemin121-31_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_19-12-2024_14-28-52_hiddensize128_lr2e-4_dropout_0-0-L22p0/@epochs1080_data18616_batchsize512_hiddensize128_timemin137-94_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_19-12-2024_14-28-52_hiddensize128/epochs1120_data18616_batchsize512_hiddensize128_timemin143-03_NAE_DYNAMIC'
+    #       lr=sqrt(2)*1e-4 
+    #           DROPOUT 0.0
+    #               L2*2.0
+
+    # ---
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_19-12-2024_03-02-38_hiddensize128_lr2e-4_dropout_0-1-L21p5/@epochs820_data18616_batchsize512_hiddensize128_timemin106-6_NAE_DYNAMIC'
+    #       lr=2e-4 
+    #           DROPOUT 0.1
+    #               L2*1.5
+    
+
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_19-12-2024_22-42-58_hiddensize128/@epochs640_data18616_batchsize512_hiddensize128_timemin63-21_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_19-12-2024_22-42-58_hiddensize128_torch_21_2_end_lr_2e-1/@epochs930_data18616_batchsize512_hiddensize128_timemin92-36_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len_model/NAE_DYNAMIC-model_19-12-2024_22-42-58_hiddensize128_torch_21_2_end_lr_2e-1/epochs1030_data18616_batchsize512_hiddensize128_timemin102-44_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-TORCH21_model/NAE_DYNAMIC-model_20-12-2024_13-50-04_hiddensize128/@epochs1750_data18616_batchsize512_hiddensize128_timemin56-42_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-TORCH21_model/NAE_DYNAMIC-model_20-12-2024_13-50-04_hiddensize128_lr1_2xL2_2xL21/@epochs1900_data18616_batchsize512_hiddensize128_timemin70-72_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-TORCH21_model/NAE_DYNAMIC-model_20-12-2024_13-50-04_hiddensize128_lr1_2xL2_2xL21/@epochs1690_data18616_batchsize512_hiddensize128_timemin50-7_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-TORCH21_model/NAE_DYNAMIC-model_20-12-2024_22-12-09_hiddensize128/@epochs1070_data18616_batchsize512_hiddensize128_timemin102-51_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-TORCH21_model/NAE_DYNAMIC-model_20-12-2024_22-12-09_hiddensize128/epochs1050_data18616_batchsize512_hiddensize128_timemin100-59_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-TORCH21_model/NAE_DYNAMIC-model_20-12-2024_22-12-09_hiddensize128/epochs1190_data18616_batchsize512_hiddensize128_timemin113-99_NAE_DYNAMIC'
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-TORCH21_model/NAE_DYNAMIC-model_20-12-2024_22-12-09_hiddensize128/epochs510_data18616_batchsize512_hiddensize128_timemin48-93_NAE_DYNAMIC'
+    saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-TORCH21_model/NAE_DYNAMIC-model_20-12-2024_18-40-45_hiddensize128/@epochs1550_data18616_batchsize512_hiddensize128_timemin149-14_NAE_DYNAMIC'
+    # --------------------
+    #=====  ON PC  ===== 
+    #       lr=2e-4 
+    #           DROPOUT 0.0
+    # -----  L2*1  -----
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len-ON-PC_model/PC-NAE_DYNAMIC-model_17-12-2024_14-51-09_hiddensize128/@epochs1060_data18616_batchsize512_hiddensize128_timemin432-3_NAE_DYNAMIC'
+    # -----  L2*1.5  -----  
+    #   epoch 780
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len-ON-PC_model/PC-NAE_DYNAMIC-model_17-12-2024_02-35-43_hiddensize128_L2x1point5/@epochs780_data18616_batchsize512_hiddensize128_timemin322-85_NAE_DYNAMIC'
+    #   epoch 1030
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len-ON-PC_model/PC-NAE_DYNAMIC-model_17-12-2024_02-35-43_hiddensize128_L2x1point5/@epochs1030_data18616_batchsize512_hiddensize128_timemin426-21_NAE_DYNAMIC'
+    # -----  L2*2  -----
+    # # epoch 750
+    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/gourd-dynamic-len-ON-PC_model/PC-NAE_DYNAMIC-model_18-12-2024_18-18-19_hiddensize128_L2x2/@epochs750_data18616_batchsize512_hiddensize128_timemin308-82_NAE_DYNAMIC'
