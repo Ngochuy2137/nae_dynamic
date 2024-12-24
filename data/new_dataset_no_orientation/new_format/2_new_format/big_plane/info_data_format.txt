@@ -1,0 +1,13 @@
+----- Data format info -----
+Object name: big_plane
+Original data path: /home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/new_dataset_no_orientation/new_format/big_plane_merged_264_ORIGIN.npz
+  Initial points removed: 5
+  Last points removed: 2
+  Data removed index: []
+  min_len_traj: 70
+  Data too short: 7
+   Data raw:
+      Trajectories: 264
+   Data new:
+      Trajectories: 257
+-------------------------------------

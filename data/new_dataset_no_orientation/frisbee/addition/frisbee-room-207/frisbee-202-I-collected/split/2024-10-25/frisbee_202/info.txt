@@ -1,6 +1,0 @@
-Data type: frisbee
-Number of first points to cut: 0
-Trajectories length:
-     Max length: 190
-     Min length: 74
-     Mean length: 115.74752475247524

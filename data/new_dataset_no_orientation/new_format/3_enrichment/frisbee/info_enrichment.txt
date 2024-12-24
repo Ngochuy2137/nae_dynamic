@@ -1,0 +1,7 @@
+Object name: frisbee
+Rotation:
+      Rotation angle: 180
+      Axis origin: [2.   0.   0.25]
+      Axis direction: [0 1 0]
+Translation vector: 0.0, 0.0, 0.0
+Original data dir: /home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/new_dataset_no_orientation/new_format/2_new_format/frisbee/frisbee_new_data_format_num_267.npz

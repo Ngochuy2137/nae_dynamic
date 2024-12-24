@@ -1,0 +1,13 @@
+----- Data mix info -----
+{
+  'bamboo': '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/nae_paper_dataset/new_data_format/bamboo/split/bamboo', 
+  'gourd': '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/nae_paper_dataset/new_data_format/gourd/split/gourd', 
+  'green': '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/nae_paper_dataset/new_data_format/green/split/green', 
+  'frisbee': '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/new_dataset_no_orientation/new_format/3_enrichment/frisbee/split', 
+  'boomerang': '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/new_dataset_no_orientation/new_format/3_enrichment/boomerang/split'
+} 
+Data mix:
+  Training data     : 820
+  Validation data   : 100
+  Testing data      : 108
+Data folders:

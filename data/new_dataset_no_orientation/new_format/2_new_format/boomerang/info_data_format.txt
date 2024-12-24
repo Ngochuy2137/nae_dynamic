@@ -1,0 +1,13 @@
+----- Data format info -----
+Object name: boomerang
+Original data path: /home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/new_dataset_no_orientation/new_format/boomerang_num-252_ORIGIN.npz
+  Initial points removed: 5
+  Last points removed: 2
+  Data removed index: []
+  min_len_traj: 70
+  Data too short: 1
+   Data raw:
+      Trajectories: 252
+   Data new:
+      Trajectories: 251
+-------------------------------------
