@@ -93,10 +93,11 @@ class DataPreprocess(DataNormalizer):
 
         if 'spline' in method:
             # tách method thành spline và bậc của spline từ string (check xem có đúng định dạng không: spline_number)
-            match = re.search(r'spline-k(?P<k>\d+)-s(?P<s>\w+)', method)
+            match = re.search(r'k(?P<k>\d+)-s(?P<s>[\d.]+)', method)
             if not match:
-                raise ValueError("The string does not contain 'univariate'")
-            
+                raise ValueError("The string does not match the expected format 'k<number>-s<number>'")
+
+            # Extract k and s
             s_value = None if match.group('s') == 'None' else float(match.group('s'))
             k_value = int(match.group('k'))
             # print(f"Found SPLINE: s: {s_value}, k: {k_value}")
@@ -574,7 +575,7 @@ def main():
     data_raw = RoCatNAEDataRawReader(data_dir).read()
     FS = 120 # Sampling frequency
     CUTOFF = 25 # Cutoff frequency
-    CUBIC_SPLINE = 'spline-k3-s0'
+    CUBIC_SPLINE = 'spline-k3-s1.0'
     data_preprocess = DataPreprocess()
     enable_data_noise_filter = True
 
