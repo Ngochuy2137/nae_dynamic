@@ -319,37 +319,46 @@ class DataPreprocess(DataNormalizer):
                     global_util_plotter.plot_trajectory_dataset_plotly([old_pos_seq, new_pos_seq], title='big change when applying butterworth', rotate_data_whose_y_up=True)
                     input('Press Enter to continue...')
 
-            new_traj_dict = traj.copy()
-            new_traj_dict['position'] = new_pos_seq
-            new_traj_dict['time_step'] = traj['original']['time_step']
+            new_traj_dict = defaultdict(dict)
+            new_traj_dict['original'] = traj['original']
+            new_traj_dict['preprocess']['time_step'] = traj['original']['time_step']
+            new_traj_dict['preprocess']['position'] = new_pos_seq
+            new_traj_dict['object_name'] = traj['object_name']
             data_pp.append(new_traj_dict)
         return data_pp
 
     def vel_acc_interpolation(self, data, interpolate_method='spline-k3-s0'):
         global_util_printer.print_blue('- Interpolating velocities and accelerations', background=True)
+
+        # self.inspect_dict_structure(data[0]); input()
         data_pp = []
         for idx, traj in enumerate(data):
             # traj Keys: frame_num, time_step, position, quaternion
-            pos_seq = traj['position'].copy()
+            if 'position'in traj['preprocess']:
+                pos_seq = traj['preprocess']['position'].copy()
+            elif 'model_data' in traj['preprocess']:
+                pos_seq = traj['preprocess']['model_data'][:, :3].copy()
+            else:
+                raise ValueError("No position data in preprocess data.")
             vel_seq = []
             acc_seq = []
 
             # for x, y, z
             for i in range(3):
-                vel_i = self.vel_interpolation(pos_seq[:, i], traj['time_step'], method=interpolate_method)
-                acc_i = self.acc_interpolation(pos_seq[:, i], traj['time_step'], method=interpolate_method)
+                vel_i = self.vel_interpolation(pos_seq[:, i], traj['preprocess']['time_step'], method=interpolate_method)
+                acc_i = self.acc_interpolation(pos_seq[:, i], traj['preprocess']['time_step'], method=interpolate_method)
                 vel_seq.append(vel_i)
                 acc_seq.append(acc_i)
             vel_seq = np.array(vel_seq).T
             acc_seq = np.array(acc_seq).T
-            # global_util_plotter.plot_line_chart(x_values=traj['time_step'], y_values=[acc_seq[:, 0], acc_seq[:, 1], acc_seq[:, 2]], title='Acceleration - With ButterWorth filter', legends=['acc_x', 'acc_y', 'acc_z'])
+            # global_util_plotter.plot_line_chart(x_values=traj['preprocess']['time_step'], y_values=[acc_seq[:, 0], acc_seq[:, 1], acc_seq[:, 2]], title='Acceleration - With ButterWorth filter', legends=['acc_x', 'acc_y', 'acc_z'])
 
-            new_traj = traj.copy()
-            new_traj['velocity'] = vel_seq
-            new_traj['acceleration'] = acc_seq
-            new_traj['model_data'] = np.concatenate([pos_seq, vel_seq, acc_seq], axis=1)    # flatten data, each data point is a row with 9 features (3 positions, 3 velocities, 3 accelerations)
-
-            data_pp.append(new_traj)
+            new_traj_dict = defaultdict(dict)
+            new_traj_dict['original'] = traj['original']
+            new_traj_dict['preprocess']['time_step'] = traj['original']['time_step']
+            new_traj_dict['preprocess']['model_data'] = np.concatenate([pos_seq, vel_seq, acc_seq], axis=1)   # flatten data, each data point is a row with 9 features (3 positions, 3 velocities, 3 accelerations)
+            new_traj_dict['object_name'] = traj['object_name']
+            data_pp.append(new_traj_dict)
         return data_pp
     
     def detect_acc_outlier(self, data_raw, acc_threshold=(-20, 20), gap_threshold=3, edge_margin=25, min_len_threshold=65, plot_outlier=False, debug=False, check_temp=False):
@@ -377,10 +386,10 @@ class DataPreprocess(DataNormalizer):
 
 
         count_flag_0 = 0
-        for traj_idx, trajectory_raw in enumerate(data_raw):
-            # global_util_printer.print_yellow(f'Processing trajectory_raw {traj_idx}...')
-            acc_data = trajectory_raw['model_data'][:, 6:]  # Lấy dữ liệu gia tốc (ax, ay, az)
-            len_traj_org = len(trajectory_raw['model_data'])
+        for traj_idx, traj in enumerate(data_raw):
+            # global_util_printer.print_yellow(f'Processing traj {traj_idx}...')
+            acc_data = traj['preprocess']['model_data'][:, 6:]  # Lấy dữ liệu gia tốc (ax, ay, az)
+            len_traj_org = len(traj['preprocess']['model_data'])
             
             # 1. Tìm các chỉ số nhiễu
             noisy_indices = [
@@ -393,7 +402,7 @@ class DataPreprocess(DataNormalizer):
             # 2. Lọc nhanh trước khi grouping
             if not noisy_indices:
                 # Không có nhiễu, thêm quỹ đạo vào danh sách đã xử lý
-                cleaned_data.append(trajectory_raw)
+                cleaned_data.append(traj)
                 count_flag_0 += 1
                 if check_temp: print('count_flag_0: ', count_flag_0)
                 continue
@@ -438,25 +447,18 @@ class DataPreprocess(DataNormalizer):
             if flag_middle_noise:
                 outlier_trajectories[traj_idx] = noisy_indices
                 continue
-            # cut noisy group at the beginning or end of trajectory_raw
+            # cut noisy group at the beginning or end of traj
             if start_cut_idx > 0 or end_cut_idx < len_traj_org:
-                cleaned_traj = trajectory_raw['model_data'][start_cut_idx:end_cut_idx]
-                cleaned_data.append({
-                    'time_step': trajectory_raw['time_step'][start_cut_idx:end_cut_idx],
-                    'position': cleaned_traj[:, :3],
-                    'velocity': cleaned_traj[:, 3:6],
-                    'acceleration': cleaned_traj[:, 6:],
-                    'model_data': cleaned_traj
-                })
+                cleaned_traj = traj.copy()                
+                cleaned_traj['preprocess']['model_data'] = traj['preprocess']['model_data'][start_cut_idx:end_cut_idx]
+                cleaned_traj['preprocess']['time_step'] = traj['preprocess']['time_step'][start_cut_idx:end_cut_idx]
+
+                # print('check cleaned_traj[preprocess] keys: ', cleaned_traj['preprocess'].keys())
+                cleaned_data.append(cleaned_traj)
                 traj_idxs_with_noise_treatment.append(traj_idx)
                 if check_temp:
-                    self.plot_acc(trajectory_raw, note=f'Before cut - Trajectory {traj_idx}')
-                    self.plot_acc(cleaned_data[-1], note=f'After cut - Trajectory {traj_idx}')
-                    input('Press Enter to continue...')
+                    self.plot_acc(traj, note=f'check_temp - Trajectory {traj_idx}')
                 continue
-
-
-
 
         if debug:
             print('----------------- FILTER ACC OUTLIER RESULT -----------------')
@@ -470,12 +472,28 @@ class DataPreprocess(DataNormalizer):
                 if plot_outlier:
                     self.plot_traj(data_raw[bad_idx], title=f'Trajectory {bad_idx}', traj_type='raw')  # plot raw trajectory
                     # plot acceleration
-                    self.plot_acc(data_raw[bad_idx], note=f'Need to manually checked - Trajectory {bad_idx}')
+                    self.plot_acc(data_raw[bad_idx], note=f'Need to manually check - Trajectory {bad_idx}')
             
             # set_none = input('Do you want to set None for bad trajectories? (y/n): ')
             # if set_none == 'y':
             #     for idx in outlier_trajectories.keys():
             #         data_pp[idx]['model_data'] = None
+        
+        
+        # # check cleaned_data
+        # noisy_traj_idxs = []
+        # for traj_idx, traj in enumerate(cleaned_data):
+        #     acc_data = traj['preprocess']['model_data'][:, 6:]
+        #     noisy_indices = [
+        #         i for i, acc in enumerate(acc_data)
+        #         if any(a < acc_threshold[0] or a > acc_threshold[1] for a in acc)
+        #     ]
+        #     if len(noisy_indices) > 0:
+        #         print(f'Trajectory {traj_idx} has noisy indices: {noisy_indices}')
+        #         noisy_traj_idxs.append(traj_idx)
+        #         # self.plot_acc(traj, note=f'check_temp - Trajectory {traj_idx}')
+        #         # input('Press Enter to continue...')
+        # global_util_printer.print_yellow(f'\n\n\nRECHECK AFTER FILTERING ACC OUTLIER {noisy_traj_idxs}'); input()
         
         return cleaned_data, outlier_trajectories, traj_idxs_with_noise_treatment
 
@@ -509,17 +527,37 @@ class DataPreprocess(DataNormalizer):
             raise ValueError("Invalid traj_type. Must be 'raw' or 'cleaned'.")
 
     def plot_acc(self, data, note=''):
-        acc = data['model_data'][:, 6:]
+        acc = data['preprocess']['model_data'][:, 6:]
         global_util_plotter.plot_line_chart(y_values=[acc[:, 0], acc[:, 1], acc[:, 2]], title=f'Acceleration - {note}', x_label='Time step', y_label='Acceleration', legends=['acc_x', 'acc_y', 'acc_z'])
     
     def backup_data(self, data, object_name):
         for idx, traj in enumerate(data):
             traj_dict = defaultdict(dict)
             traj_dict['original'] = {key: value.copy() for key, value in traj.items()}
+            traj_dict['original']['idx_org'] = idx
             traj_dict['object_name'] = object_name
             data[idx] = traj_dict
         global_util_printer.print_green(f'Backed up data to original field')
         return data
+
+    def inspect_dict_structure(self, d, prefix=""):
+        """
+        Liệt kê tất cả các keys (kể cả keys con) trong một dictionary hoặc defaultdict.
+
+        Args:
+            d (dict or defaultdict): Dictionary cần kiểm tra.
+            prefix (str): Chuỗi tiền tố để thể hiện key đầy đủ ở mỗi tầng.
+
+        Returns:
+            None
+        """
+        if not isinstance(d, dict):
+            return  # Không làm gì nếu giá trị không phải dictionary
+
+        for key in d.keys():
+            print(f"  {prefix}{key}")  # In key hiện tại
+            self.inspect_dict_structure(d[key], prefix=f"{prefix}{key}.")  # Gọi đệ quy cho keys con
+
 
 def main():
     data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bamboo_168'
