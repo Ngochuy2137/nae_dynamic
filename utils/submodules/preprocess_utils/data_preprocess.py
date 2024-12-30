@@ -98,7 +98,7 @@ class DataPreprocess(DataNormalizer):
             
             s_value = None if match.group('s') == 'None' else float(match.group('s'))
             k_value = int(match.group('k'))
-            print(f"Found SPLINE: s: {s_value}, k: {k_value}")
+            # print(f"Found SPLINE: s: {s_value}, k: {k_value}")
             raw_f = UnivariateSpline(t_arr, x_arr, k=k_value, s=s_value)
             vel = raw_f.derivative(n=1)(t_arr)
             acc = raw_f.derivative(n=2)(t_arr)
@@ -172,7 +172,7 @@ class DataPreprocess(DataNormalizer):
             
             s_value = None if match.group('s') == 'None' else float(match.group('s'))
             k_value = int(match.group('k'))
-            print(f"Found SPLINE: s: {s_value}, k: {k_value}")
+            # print(f"Found SPLINE: s: {s_value}, k: {k_value}")
             raw_f = UnivariateSpline(t_arr, x_arr, k=k_value, s=s_value)
             vel = raw_f.derivative(n=1)(t_arr)
             acc = raw_f.derivative(n=2)(t_arr)
@@ -258,123 +258,6 @@ class DataPreprocess(DataNormalizer):
     def run(self, trajectories, fs, cutoff):
         pass
 
-    def detect_acc_outlier(self, data_pp, acc_threshold=(-20, 20), gap_threshold=3, edge_margin=25, min_len_threshold=65, plot_outlier=False):
-        """
-        Lọc ra và xử lý dữ liệu quỹ đạo xuất hiện nhiễu gia tốc:
-        - Những quỹ đạo có nhiễu gia tốc ở phần đầu hoặc cuối sẽ được cắt bỏ.
-        - Những quỹ đạo có nhiễu gia tốc ở giữa không thể xử lý được và được lưu vào biến bad_trajectories
-
-        Args:
-            data_pp (list of dict): Dữ liệu quỹ đạo, mỗi phần tử là một dictionary chứa 'model_data'.
-            acc_threshold (float): Ngưỡng giá trị gia tốc để xác định nhiễu.
-            gap_threshold (int): Khoảng cách tối đa giữa hai điểm nhiễu để coi là một chuỗi nhiễu.
-            edge_margin (int): Ngưỡng để kiểm tra xem một group nhiễu có nằm gần biên (đầu/cuối) của quỹ đạo hay không.
-            min_len_threshold (int): Độ dài tối thiểu của quỹ đạo sau khi loại bỏ nhiễu, nếu nhỏ hơn sẽ bị loại bỏ.
-
-        Returns:
-            cleaned_data (list of dict): Dữ liệu đã được xử lý, loại bỏ các điểm nhiễu ở đầu và cuối.
-            bad_trajectories (list of dict): List các index của các quỹ đạo có nhiễu ở giữa để xử lý riêng.
-        """
-        cleaned_data = []
-        bad_trajectories = defaultdict(list)
-        changed_idxs = []
-
-        for traj_idx, trajectory in enumerate(data_pp):
-            acc_data = trajectory['model_data'][:, 6:]  # Lấy dữ liệu gia tốc (ax, ay, az)
-            len_traj_org = len(trajectory['model_data'])
-            
-            # 1. Tìm các chỉ số nhiễu
-            noisy_indices = [
-                i for i, acc in enumerate(acc_data)
-                if any(a < acc_threshold[0] or a > acc_threshold[1] for a in acc)
-            ]
-
-            # 2. Lọc nhanh trước khi grouping
-            if not noisy_indices:
-                # Không có nhiễu, thêm quỹ đạo vào danh sách đã xử lý
-                cleaned_data.append(trajectory)
-                continue
-            if len_traj_org - len(noisy_indices) < min_len_threshold:
-                bad_trajectories[traj_idx] = noisy_indices
-                changed_idxs.append(traj_idx)
-                # trajectory['model_data'] = None
-                continue
-
-            # else: need to process noisy data
-            # 3. Grouping noisy indices
-            groups = []
-            current_group = [noisy_indices[0]]
-            # Nhóm các chỉ số nhiễu theo gap_threshold
-            for idx in noisy_indices[1:]:
-                if idx - current_group[-1] <= gap_threshold:
-                    current_group.append(idx)
-                else:
-                    groups.append(current_group)
-                    current_group = [idx]
-            groups.append(current_group)
-
-            # 4. Remove noise
-            if len(groups) > 2:
-                bad_trajectories[traj_idx] = noisy_indices
-                changed_idxs.append(traj_idx)
-                # trajectory['model_data'] = None
-                continue
-
-            # Chỉ còn lại 1 hoặc 2 nhóm nhiễu
-            group_in_middle = False
-            for group in groups:
-                # nhiễu có thể nằm ở đâu hoặc cuối hoặc giữa
-                # Xác định đoạn nhiễu này thuộc khu vực nào
-                if group[0] > len_traj_org - edge_margin:   # Group nhiễu cuối
-                    # Cắt bỏ các đoạn nhiễu ở cuối
-                    trajectory['model_data'] = trajectory['model_data'][:group[0]]
-                elif group[-1] < edge_margin:                                 # Group nhiễu đầu
-                    # Cắt bỏ các đoạn nhiễu ở đầu
-                    trajectory['model_data'] = trajectory['model_data'][group[-1]:]
-                else:                                               # Group nhiễu giữa                                     
-                    group_in_middle = True
-                    break
-            if group_in_middle:
-                bad_trajectories[traj_idx] = noisy_indices
-                changed_idxs.append(traj_idx)
-                # trajectory['model_data'] = None
-                continue
-            
-            if  len(trajectory['model_data']) < min_len_threshold:
-                bad_trajectories[traj_idx] = noisy_indices
-                changed_idxs.append(traj_idx)
-                # trajectory['model_data'] = None
-                continue
-
-            cleaned_data.append(trajectory)
-            changed_idxs.append(traj_idx)
-
-        print('----------------- FILTER ACC OUTLIER RESULT -----------------')
-        global_util_printer.print_yellow(f'Cleaned data count: {len(cleaned_data)}/{len(data_pp)}')
-        global_util_printer.print_yellow(f'Bad trajectory count: {len(bad_trajectories)}')
-        # count number of trajectories whose None model_data
-        none_count = 0
-        for traj in data_pp:
-            if traj['model_data'] is None:
-                none_count += 1
-        global_util_printer.print_yellow(f'Trajectories with None model_data: {none_count}')
-        global_util_printer.print_yellow(f'Changed trajectory count: {len(changed_idxs)}')
-        for bad_idx, noisy_idxs in bad_trajectories.items():
-            global_util_printer.print_red('The following trajectories cannot be cleaned:')
-            print(f'    Trajectory: {bad_idx}: {noisy_idxs} / {len(data_pp[bad_idx]["position"])}')
-            if plot_outlier:
-                global_util_plotter.plot_trajectory_dataset_plotly(trajectories=[data_pp[bad_idx]['position']], title=f'Bad trajectory #{bad_idx}', rotate_data_whose_y_up=True)
-                # plot acceleration
-                acc = data_pp[bad_idx]['model_data'][:, 6:]
-                global_util_plotter.plot_line_chart(x_values=data_pp[bad_idx]['time_step'], y_values=[acc[:, 0], acc[:, 1], acc[:, 2]], title=f'Acceleration - Trajectory {bad_idx}', x_label='Time step', y_label='Acceleration', legends=['acc_x', 'acc_y', 'acc_z'])
-        set_none = input('Do you want to set None for bad trajectories? (y/n): ')
-        if set_none == 'y':
-            for idx in bad_trajectories.keys():
-                data_pp[idx]['model_data'] = None
-        return cleaned_data, bad_trajectories, changed_idxs
-
-
-
     def save_processed_data(self, data_pp, object_name):
         # get current path
         current_path = os.path.dirname(os.path.realpath(__file__))
@@ -390,46 +273,29 @@ class DataPreprocess(DataNormalizer):
         global_util_printer.print_green(f'Saved processed data to {output_dir}')
 
 
-    def apply_butterworth_filter_and_interpolation(self, data, cutoff, freq_samp, butterworth_loop=1, interpolate_method='spline-k3-s0'):
+    def apply_butterworth_filter(self, data, cutoff, freq_samp, butterworth_loop=1, debug=False):
+        global_util_printer.print_blue('- Applying Butterworth filter', background=True)
         data_pp = []
         for idx, traj in enumerate(data):
             # traj Keys: frame_num, time_step, position, quaternion
 
-            global_util_printer.print_green(f'Processing trajectory {idx}', background=True)
-            pos_seq = traj['position'].copy()
-            vel_seq = []
-            acc_seq = []
+            pos_seq_raw = traj['original']['position']
             
             # ---------------------------
             # 1. Apply Butterworth filter
             # ---------------------------
-            old_pos_seq = pos_seq.copy()  # just for checking
+            old_pos_seq = pos_seq_raw.copy()  # just for checking
+            new_pos_seq = pos_seq_raw.copy()
             # for x, y, z
             for i in range(3):
                 for bl in range(butterworth_loop):
-                    # print(f'-------- {bl} --------')
-                    # copy the raw data for checking
-                    # pos_seq_i_raw = pos_seq[:, i].copy()
-                    pos_seq[:, i] = self.apply_butterworth_for_axis(pos_seq[:, i], cutoff, freq_samp, order=4)
-                    # # check if the filtered data is the same as the raw data based on np.allclose()
-                    # diff_allclose = np.allclose(pos_seq_i_raw, pos_seq[:, i], atol=1e-4, rtol=1e-4)
-                    # if diff_allclose:
-                    #     global_util_printer.print_green('       diff_allclose NO CHANGES')
-                    # else:
-                    #     global_util_printer.print_yellow('       diff_allclose CHANGES')
-                    # diff = np.where(pos_seq_i_raw != pos_seq[:, i])
-                    # if len(diff[0]) > 0:
-                    #     global_util_printer.print_yellow(f'      where CHANGE: {len(diff[0])}/{pos_seq.shape[0]} steps')
-                    # else:
-                    #     global_util_printer.print_green('       where NO CHANGES')
-                    # input('check 111')
+                    new_pos_seq[:, i] = self.apply_butterworth_for_axis(pos_seq_raw[:, i], cutoff, freq_samp, order=4)
             
             # check difference
-            new_pos_seq = pos_seq.copy()  # just for checking
             diff = np.where(old_pos_seq != new_pos_seq)  # just for checking
             if len(diff[0]) > 0:
                 diff_steps = np.unique(diff[0])
-                global_util_printer.print_yellow(f'There are changes after applying Butterworth filter: {len(diff_steps)}/{old_pos_seq.shape[0]} steps')
+                if debug: global_util_printer.print_yellow(f'There are changes after applying Butterworth filter: {len(diff_steps)}/{old_pos_seq.shape[0]} steps')
                 d = new_pos_seq - old_pos_seq
                 # check if the difference is significant
                 small_change = True
@@ -437,22 +303,37 @@ class DataPreprocess(DataNormalizer):
                     if np.linalg.norm(d[step]) > 0.01:
                         global_util_printer.print_red(f'Step {step} has significant difference: {np.linalg.norm(d[step])}')
                         small_change = False
-                    # get random step in diff_steps to check
-                    random_step = np.random.choice(diff_steps)
-                    print('Random step: ', random_step)
-                    print('     Old pos: ', old_pos_seq[random_step])
-                    print('     New pos: ', new_pos_seq[random_step])
+                    
+                    if debug:
+                        # get random step in diff_steps to check
+                        random_step = np.random.choice(diff_steps)
+                        print('Random step: ', random_step)
+                        print('     Old pos: ', old_pos_seq[random_step])
+                        print('     New pos: ', new_pos_seq[random_step])
+
                     break
                 if small_change:
-                    global_util_printer.print_green('SMALL CHANGES')
+                    if debug: global_util_printer.print_green('SMALL CHANGES')
                 else:
-                    global_util_printer.print_yellow('BIG CHANGES')
-                    global_util_plotter.plot_trajectory_dataset_plotly([old_pos_seq, new_pos_seq], title='', rotate_data_whose_y_up=True)
+                    if debug: global_util_printer.print_yellow('BIG CHANGES')
+                    global_util_plotter.plot_trajectory_dataset_plotly([old_pos_seq, new_pos_seq], title='big change when applying butterworth', rotate_data_whose_y_up=True)
                     input('Press Enter to continue...')
 
-            # -------------------------------------------
-            # 2. Interpolate velocities and accelerations
-            # -------------------------------------------
+            new_traj_dict = traj.copy()
+            new_traj_dict['position'] = new_pos_seq
+            new_traj_dict['time_step'] = traj['original']['time_step']
+            data_pp.append(new_traj_dict)
+        return data_pp
+
+    def vel_acc_interpolation(self, data, interpolate_method='spline-k3-s0'):
+        global_util_printer.print_blue('- Interpolating velocities and accelerations', background=True)
+        data_pp = []
+        for idx, traj in enumerate(data):
+            # traj Keys: frame_num, time_step, position, quaternion
+            pos_seq = traj['position'].copy()
+            vel_seq = []
+            acc_seq = []
+
             # for x, y, z
             for i in range(3):
                 vel_i = self.vel_interpolation(pos_seq[:, i], traj['time_step'], method=interpolate_method)
@@ -463,16 +344,182 @@ class DataPreprocess(DataNormalizer):
             acc_seq = np.array(acc_seq).T
             # global_util_plotter.plot_line_chart(x_values=traj['time_step'], y_values=[acc_seq[:, 0], acc_seq[:, 1], acc_seq[:, 2]], title='Acceleration - With ButterWorth filter', legends=['acc_x', 'acc_y', 'acc_z'])
 
-            # create dictionary for each trajectory
-            new_traj = {
-                'time_step': traj['time_step'],
-                'position': pos_seq,
-                'velocity': vel_seq,
-                'acceleration': acc_seq,
-                'model_data': np.concatenate([pos_seq, vel_seq, acc_seq], axis=1)   # flatten data, each data point is a row with 9 features (3 positions, 3 velocities, 3 accelerations)
-            }
+            new_traj = traj.copy()
+            new_traj['velocity'] = vel_seq
+            new_traj['acceleration'] = acc_seq
+            new_traj['model_data'] = np.concatenate([pos_seq, vel_seq, acc_seq], axis=1)    # flatten data, each data point is a row with 9 features (3 positions, 3 velocities, 3 accelerations)
+
             data_pp.append(new_traj)
         return data_pp
+    
+    def detect_acc_outlier(self, data_raw, acc_threshold=(-20, 20), gap_threshold=3, edge_margin=25, min_len_threshold=65, plot_outlier=False, debug=False, check_temp=False):
+        """
+        Lọc ra và xử lý dữ liệu quỹ đạo xuất hiện nhiễu gia tốc:
+        - Những quỹ đạo có nhiễu gia tốc ở phần đầu hoặc cuối sẽ được cắt bỏ.
+        - Những quỹ đạo có nhiễu gia tốc ở giữa không thể xử lý được và được lưu vào biến outlier_trajectories
+
+        Args:
+            data_raw (list of dict): Dữ liệu quỹ đạo, mỗi phần tử là một dictionary chứa 'model_data'.
+            acc_threshold (float): Ngưỡng giá trị gia tốc để xác định nhiễu.
+            gap_threshold (int): Khoảng cách tối đa giữa hai điểm nhiễu để coi là một chuỗi nhiễu.
+            edge_margin (int): Ngưỡng để kiểm tra xem một group nhiễu có nằm gần biên (đầu/cuối) của quỹ đạo hay không.
+            min_len_threshold (int): Độ dài tối thiểu của quỹ đạo sau khi loại bỏ nhiễu, nếu nhỏ hơn sẽ bị loại bỏ.
+
+        Returns:
+            cleaned_data (list of dict): Dữ liệu đã được xử lý, loại bỏ các điểm nhiễu ở đầu và cuối.
+            outlier_trajectories (default dict): Trajectory indices and their noisy indices, which cannot be cleaned and need to manually check.
+        """
+        global_util_printer.print_blue('- Detecting acceleration outliers', background=True)
+
+        cleaned_data = []
+        outlier_trajectories = defaultdict(list)
+        traj_idxs_with_noise_treatment = []
+
+
+        count_flag_0 = 0
+        for traj_idx, trajectory_raw in enumerate(data_raw):
+            # global_util_printer.print_yellow(f'Processing trajectory_raw {traj_idx}...')
+            acc_data = trajectory_raw['model_data'][:, 6:]  # Lấy dữ liệu gia tốc (ax, ay, az)
+            len_traj_org = len(trajectory_raw['model_data'])
+            
+            # 1. Tìm các chỉ số nhiễu
+            noisy_indices = [
+                i for i, acc in enumerate(acc_data)
+                if any(a < acc_threshold[0] or a > acc_threshold[1] for a in acc)
+            ]
+
+            # print('noisy_indices len: ', len(noisy_indices))
+
+            # 2. Lọc nhanh trước khi grouping
+            if not noisy_indices:
+                # Không có nhiễu, thêm quỹ đạo vào danh sách đã xử lý
+                cleaned_data.append(trajectory_raw)
+                count_flag_0 += 1
+                if check_temp: print('count_flag_0: ', count_flag_0)
+                continue
+            if len_traj_org - len(noisy_indices) < min_len_threshold:
+                outlier_trajectories[traj_idx] = noisy_indices
+                continue
+
+            # 3. Grouping noisy indices
+            ns_groups = self.group_noisy_indices(noisy_indices, gap_threshold)
+
+            # 4. Noisy treatment
+            '''
+            We treat noisy data as follows:
+            - If there exists noisy group in the middle of trajectory, we cannot clean it -> add to outlier_trajectories, continue to next trajectory.
+            - If there exists noisy group at the beginning or end of trajectory, we remove it.
+            '''
+            # 4.1 Check if there exists noisy group in the middle of trajectory:
+            # check if edge margin is available
+            if edge_margin*2 > len_traj_org:
+                raise ValueError("The edge_margin is too long to check noisy groups.")
+            # classify by checking first and last index of each noisy group
+            flag_middle_noise = False
+            start_cut_idx = 0
+            end_cut_idx = len_traj_org
+            for gr in ns_groups:
+                first_idx = gr[0]
+                last_idx = gr[-1]
+
+                # Check middle noise
+                if  (edge_margin <= first_idx <= len_traj_org - edge_margin) or \
+                    (edge_margin <= last_idx  <= len_traj_org - edge_margin):
+                    flag_middle_noise = True
+                    break
+                # Check beginning noise
+                if last_idx < edge_margin:
+                    start_cut_idx = max(start_cut_idx, last_idx + 1)
+                # Check end noise
+                if first_idx > len_traj_org - edge_margin:
+                    end_cut_idx = min(end_cut_idx, first_idx)
+
+            
+            if flag_middle_noise:
+                outlier_trajectories[traj_idx] = noisy_indices
+                continue
+            # cut noisy group at the beginning or end of trajectory_raw
+            if start_cut_idx > 0 or end_cut_idx < len_traj_org:
+                cleaned_traj = trajectory_raw['model_data'][start_cut_idx:end_cut_idx]
+                cleaned_data.append({
+                    'time_step': trajectory_raw['time_step'][start_cut_idx:end_cut_idx],
+                    'position': cleaned_traj[:, :3],
+                    'velocity': cleaned_traj[:, 3:6],
+                    'acceleration': cleaned_traj[:, 6:],
+                    'model_data': cleaned_traj
+                })
+                traj_idxs_with_noise_treatment.append(traj_idx)
+                if check_temp:
+                    self.plot_acc(trajectory_raw, note=f'Before cut - Trajectory {traj_idx}')
+                    self.plot_acc(cleaned_data[-1], note=f'After cut - Trajectory {traj_idx}')
+                    input('Press Enter to continue...')
+                continue
+
+
+
+
+        if debug:
+            print('----------------- FILTER ACC OUTLIER RESULT -----------------')
+            global_util_printer.print_yellow(f'Cleaned data count: {len(cleaned_data)}/{len(data_raw)}')
+            global_util_printer.print_yellow(f'Bad trajectory count: {len(outlier_trajectories)}')
+            # count number of trajectories whose None model_data
+            global_util_printer.print_yellow(f'Number of treated trajectories: {len(traj_idxs_with_noise_treatment)}/{len(data_raw)} : {traj_idxs_with_noise_treatment}')
+            for bad_idx, noisy_idxs in outlier_trajectories.items():
+                global_util_printer.print_red('The following trajectories cannot be cleaned:')
+                print(f'    Trajectory: {bad_idx}: {noisy_idxs} / {len(data_raw[bad_idx]["position"])}')
+                if plot_outlier:
+                    self.plot_traj(data_raw[bad_idx], title=f'Trajectory {bad_idx}', traj_type='raw')  # plot raw trajectory
+                    # plot acceleration
+                    self.plot_acc(data_raw[bad_idx], note=f'Need to manually checked - Trajectory {bad_idx}')
+            
+            # set_none = input('Do you want to set None for bad trajectories? (y/n): ')
+            # if set_none == 'y':
+            #     for idx in outlier_trajectories.keys():
+            #         data_pp[idx]['model_data'] = None
+        
+        return cleaned_data, outlier_trajectories, traj_idxs_with_noise_treatment
+
+    def group_noisy_indices(self, noisy_indices, gap_threshold):
+        """
+        Nhóm các chỉ số nhiễu thành các nhóm dựa trên khoảng cách tối đa (gap_threshold).
+
+        Args:
+            noisy_indices (list[int]): Danh sách các chỉ số nhiễu đã được sắp xếp.
+            gap_threshold (int): Khoảng cách tối đa giữa hai chỉ số để coi là một nhóm.
+
+        Returns:
+            list[list[int]]: Danh sách các nhóm chỉ số nhiễu.
+        """
+        if not noisy_indices:
+            raise ValueError("The noisy_indices list needs to have at least one element to use this function.")
+        noisy_indices = np.array(noisy_indices)
+        gaps = np.diff(noisy_indices)  # Tính khoảng cách giữa các chỉ số
+        group_boundaries = np.where(gaps >= gap_threshold)[0] + 1  # Tìm ranh giới giữa các nhóm
+        return [list(group) for group in np.split(noisy_indices, group_boundaries)]
+    
+    def plot_traj(self, data, title='', traj_type='raw'):
+        '''
+        traj_type: 'raw' or 'cleaned'
+        '''
+        if traj_type == 'raw':
+            global_util_plotter.plot_trajectory_dataset_plotly(trajectories=[data['raw']['position']], title=title, rotate_data_whose_y_up=True)
+        elif traj_type == 'cleaned':
+            global_util_plotter.plot_trajectory_dataset_plotly(trajectories=[data['model_data'][:, :3]], title=title, rotate_data_whose_y_up=True)
+        else:
+            raise ValueError("Invalid traj_type. Must be 'raw' or 'cleaned'.")
+
+    def plot_acc(self, data, note=''):
+        acc = data['model_data'][:, 6:]
+        global_util_plotter.plot_line_chart(y_values=[acc[:, 0], acc[:, 1], acc[:, 2]], title=f'Acceleration - {note}', x_label='Time step', y_label='Acceleration', legends=['acc_x', 'acc_y', 'acc_z'])
+    
+    def backup_data(self, data, object_name):
+        for idx, traj in enumerate(data):
+            traj_dict = defaultdict(dict)
+            traj_dict['original'] = {key: value.copy() for key, value in traj.items()}
+            traj_dict['object_name'] = object_name
+            data[idx] = traj_dict
+        global_util_printer.print_green(f'Backed up data to original field')
+        return data
 
 def main():
     data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bamboo_168'
@@ -486,59 +533,44 @@ def main():
 
     while(enable_data_noise_filter):
         # ------------------------------------------------------------
+        # 0. Create a new field 'original' in data_raw to store the original data
+        # ------------------------------------------------------------
+        data_raw = data_preprocess.backup_data(data_raw, object_name)
+
+        # ------------------------------------------------------------
         # 1. Apply Butterworth filter and interpolation
         # ------------------------------------------------------------
-        data_pp = data_preprocess.apply_butterworth_filter_and_interpolation(data_raw, cutoff=CUTOFF, freq_samp=FS, butterworth_loop=1, interpolate_method=CUBIC_SPLINE)
+        data_pp = data_preprocess.apply_butterworth_filter(data_raw, cutoff=CUTOFF, freq_samp=FS, butterworth_loop=1, debug=True)
+        input('Done applying ButterWorth filter. Press Enter to continue...')
+
+        # -------------------------------------------
+        # 2. Interpolate velocities and accelerations
+        # -------------------------------------------
+        data_pp = data_preprocess.vel_acc_interpolation(data_pp, interpolate_method=CUBIC_SPLINE)
+        input('Done interpolating velocities and accelerations. Press Enter to continue...')
 
         # ------------------------------------------------------------
-        # 2. Filter out outlier trajectories with outlier acceleration
+        # 3. Filter out outlier trajectories with outlier acceleration
         # ------------------------------------------------------------
-        cleaned_data, bad_trajectories, changed_idxs = data_preprocess.detect_acc_outlier(data_pp, acc_threshold=(-30, 30), gap_threshold=3, edge_margin=25, min_len_threshold=65, plot_outlier=True)
-        global_util_printer.print_yellow(f'CHECK 111: len(bad_trajectories): {len(bad_trajectories)}')
+        cleaned_data, outlier_trajectories, traj_idxs_with_noise_treatment = data_preprocess.detect_acc_outlier(data_pp, acc_threshold=(-30, 30), gap_threshold=3, edge_margin=10, min_len_threshold=65, plot_outlier=False, debug=True)
+        global_util_printer.print_yellow(f'CHECK 111: len(outlier_trajectories): {len(outlier_trajectories)}'); input('Press Enter to continue...')
+
+        data_pp = cleaned_data
+        data_pp = data_preprocess.vel_acc_interpolation(data_pp, interpolate_method=CUBIC_SPLINE)
+
+        # check outlier second time
+        cleaned_data, outlier_trajectories, traj_idxs_with_noise_treatment = data_preprocess.detect_acc_outlier(data_pp, acc_threshold=(-30, 30), gap_threshold=3, edge_margin=10, min_len_threshold=65, plot_outlier=False, debug=True, check_temp=True)
+        global_util_printer.print_yellow(f'CHECK 222: len(outlier_trajectories): {len(outlier_trajectories)}'); input('Press Enter to continue...')
+
         input('Done filtering outlier trajectories. Press Enter to continue...')
 
-        # if len(bad_trajectories) == 0:
+        # if len(outlier_trajectories) == 0:
         #     enable_data_noise_filter = False
 
 
     input('Press Enter to continue...')
     
 
-    # find trajectory with outlier acceleration
-    # save outlier data into defaultdict
-    # Tìm các trajectory có outliers
-    outlier_idx = []
-    for idx, data in enumerate(data_pp):  # Duyệt qua từng trajectory
-        for step, acc_i in enumerate(data['model_data'][:, 6:]):  # Lấy acceleration
-            if any(acc > 50 for acc in acc_i):  # Kiểm tra nếu bất kỳ giá trị nào > 10
-                outlier_idx.append((idx, step))
-
-    print('Outlier data count: ', len(outlier_idx))
-
-    # Lưu các outliers vào defaultdict
-    outlier_data = defaultdict(list)
-    for idx, step in outlier_idx:
-        outlier_data[idx].append(step)
-
-    global_util_printer.print_yellow(f'There are {len(outlier_data)}/{len(data_pp)} trajectories with outlier acceleration')
-    input('Do you want to see the outlier data? Press Enter to continue...')
-    for idx, steps in outlier_data.items():
-        global_util_printer.print_yellow(f'Trajectory {idx}: {len(data_pp[idx]["model_data"])}')
-        print(f'        {steps}')
-        if idx == 44 or idx == 83:
-            # plot the outlier position trajectory
-            global_util_plotter.plot_trajectory_dataset_plotly(trajectories=[data_pp[idx]['position']], title=f'trajectory #{idx}', rotate_data_whose_y_up=True)
-            # plot acceleration
-            # create x-axis with arange, not data_pp[idx]['time_step']
-            x_axis = np.arange(len(data_pp[idx]['model_data']))
-            global_util_plotter.plot_line_chart(x_values=x_axis, y_values=[data_pp[idx]['model_data'][:, 6], data_pp[idx]['model_data'][:, 7], data_pp[idx]['model_data'][:, 8]], title=f'Acceleration - Trajectory {idx}', legends=['acc_x', 'acc_y', 'acc_z'])
-            input('Press Enter to continue...')
-    input('Done checking outlier acceleration. Press Enter to continue...')
-    # # check outlier acceleration values
-    # for idx, traj in enumerate(data_pp):
-    #     acc_data = traj['model_data'][:, 6:]
-    #     for step, acc_i in enumerate(acc_data):
-    #         if acc_i[0] > 20 or acc_i[1] > 20 or acc_i[2] > 20:
     #             global_util_printer.print_yellow(f'Trajectory {idx} has outlier acceleration at step {step}')
     #             print('Acceleration: ', acc_i)
     #             print('Position: ', traj['position'][step])
