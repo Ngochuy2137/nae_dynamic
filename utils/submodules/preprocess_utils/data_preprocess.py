@@ -10,6 +10,7 @@ from sklearn.preprocessing import MinMaxScaler
 import joblib  # Để lưu scaler
 from tqdm import tqdm
 from collections import defaultdict
+import copy
 
 from nae_core.utils.submodules.preprocess_utils.data_raw_reader import RoCatRLLabDataRawReader, RoCatNAEDataRawReader
 
@@ -284,8 +285,12 @@ class DataPreprocess(DataNormalizer):
             # ---------------------------
             # 1. Apply Butterworth filter
             # ---------------------------
-            old_pos_seq = pos_seq_raw.copy()  # just for checking
-            new_pos_seq = pos_seq_raw.copy()
+
+            
+            # old_pos_seq = pos_seq_raw.copy()  # just for checking
+            # new_pos_seq = pos_seq_raw.copy()
+            old_pos_seq = copy.deepcopy(pos_seq_raw)    # use deepcopy to avoid changing the original data
+            new_pos_seq = copy.deepcopy(pos_seq_raw)    # use deepcopy to avoid changing the original data
             # for x, y, z
             for i in range(3):
                 for bl in range(butterworth_loop):
@@ -335,9 +340,11 @@ class DataPreprocess(DataNormalizer):
         for idx, traj in enumerate(data):
             # traj Keys: frame_num, time_step, position, quaternion
             if 'position'in traj['preprocess']:
-                pos_seq = traj['preprocess']['position'].copy()
+                # pos_seq = traj['preprocess']['position'].copy()
+                pos_seq = copy.deepcopy(traj['preprocess']['position']) # use deepcopy to avoid changing the original data
             elif 'model_data' in traj['preprocess']:
-                pos_seq = traj['preprocess']['model_data'][:, :3].copy()
+                # pos_seq = traj['preprocess']['model_data'][:, :3].copy()
+                pos_seq = copy.deepcopy(traj['preprocess']['model_data'][:, :3])    # use deepcopy to avoid changing the original data
             else:
                 raise ValueError("No position data in preprocess data.")
             vel_seq = []
@@ -385,7 +392,7 @@ class DataPreprocess(DataNormalizer):
         traj_idxs_with_noise_treatment = []
 
 
-        count_flag_0 = 0
+        # count_flag_0 = 0
         for traj_idx, traj in enumerate(data_raw):
             # global_util_printer.print_yellow(f'Processing traj {traj_idx}...')
             acc_data = traj['preprocess']['model_data'][:, 6:]  # Lấy dữ liệu gia tốc (ax, ay, az)
@@ -403,8 +410,8 @@ class DataPreprocess(DataNormalizer):
             if not noisy_indices:
                 # Không có nhiễu, thêm quỹ đạo vào danh sách đã xử lý
                 cleaned_data.append(traj)
-                count_flag_0 += 1
-                if check_temp: print('count_flag_0: ', count_flag_0)
+                # count_flag_0 += 1
+                # if check_temp: print('count_flag_0: ', count_flag_0)
                 continue
             if len_traj_org - len(noisy_indices) < min_len_threshold:
                 outlier_trajectories[traj_idx] = noisy_indices
@@ -449,7 +456,7 @@ class DataPreprocess(DataNormalizer):
                 continue
             # cut noisy group at the beginning or end of traj
             if start_cut_idx > 0 or end_cut_idx < len_traj_org:
-                cleaned_traj = traj.copy()                
+                cleaned_traj = copy.deepcopy(traj)       
                 cleaned_traj['preprocess']['model_data'] = traj['preprocess']['model_data'][start_cut_idx:end_cut_idx]
                 cleaned_traj['preprocess']['time_step'] = traj['preprocess']['time_step'][start_cut_idx:end_cut_idx]
 
@@ -457,7 +464,8 @@ class DataPreprocess(DataNormalizer):
                 cleaned_data.append(cleaned_traj)
                 traj_idxs_with_noise_treatment.append(traj_idx)
                 if check_temp:
-                    self.plot_acc(traj, note=f'check_temp - Trajectory {traj_idx}')
+                    self.plot_acc(traj, note=f'before cut - Trajectory {traj_idx}')
+                    self.plot_acc(cleaned_traj, note=f'after cut - Trajectory {traj_idx}')
                 continue
 
         if debug:
@@ -533,7 +541,8 @@ class DataPreprocess(DataNormalizer):
     def backup_data(self, data, object_name):
         for idx, traj in enumerate(data):
             traj_dict = defaultdict(dict)
-            traj_dict['original'] = {key: value.copy() for key, value in traj.items()}
+            # traj_dict['original'] = {key: value.copy() for key, value in traj.items()}
+            traj_dict['original'] = {key: copy.deepcopy(value) for key, value in traj.items()}  # use deepcopy to avoid changing original data
             traj_dict['original']['idx_org'] = idx
             traj_dict['object_name'] = object_name
             data[idx] = traj_dict
