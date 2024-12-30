@@ -93,13 +93,7 @@ class DataPreprocess(DataNormalizer):
 
         if 'spline' in method:
             # tách method thành spline và bậc của spline từ string (check xem có đúng định dạng không: spline_number)
-            match = re.search(r'k(?P<k>\d+)-s(?P<s>[\d.]+)', method)
-            if not match:
-                raise ValueError("The string does not match the expected format 'k<number>-s<number>'")
-
-            # Extract k and s
-            s_value = None if match.group('s') == 'None' else float(match.group('s'))
-            k_value = int(match.group('k'))
+            s_value, k_value = self.get_s_k_values_from_string(method)
             # print(f"Found SPLINE: s: {s_value}, k: {k_value}")
             raw_f = UnivariateSpline(t_arr, x_arr, k=k_value, s=s_value)
             vel = raw_f.derivative(n=1)(t_arr)
@@ -168,12 +162,7 @@ class DataPreprocess(DataNormalizer):
         # check if the method string has "spline" inside:
         if 'spline' in method:
             # tách method thành spline và bậc của spline từ string (check xem có đúng định dạng không: spline_number)
-            match = re.search(r'spline-k(?P<k>\d+)-s(?P<s>\w+)', method)
-            if not match:
-                raise ValueError("The string does not contain 'univariate'")
-            
-            s_value = None if match.group('s') == 'None' else float(match.group('s'))
-            k_value = int(match.group('k'))
+            s_value, k_value = self.get_s_k_values_from_string(method)
             # print(f"Found SPLINE: s: {s_value}, k: {k_value}")
             raw_f = UnivariateSpline(t_arr, x_arr, k=k_value, s=s_value)
             vel = raw_f.derivative(n=1)(t_arr)
@@ -239,6 +228,15 @@ class DataPreprocess(DataNormalizer):
                             2 * (vel_arr[i] - vel_arr[i - 1]) / (dt1 * (dt1 + dt2))
         return acc
 
+    def get_s_k_values_from_string(self, method):
+        match = re.search(r'k(?P<k>\d+)-s(?P<s>[\d.]+)', method)
+        if not match:
+            raise ValueError("The string does not match the expected format 'k<number>-s<number>'")
+        # Extract k and s
+        s_value = None if match.group('s') == 'None' else float(match.group('s'))
+        k_value = int(match.group('k'))
+        return s_value, k_value
+    
     # Hàm áp dụng Butterworth filter
     def apply_butterworth_for_axis(self, data, cutoff, fs, order=4):
         nyquist = 0.5 * fs  # Tần số Nyquist
@@ -488,22 +486,6 @@ class DataPreprocess(DataNormalizer):
             #     for idx in outlier_trajectories.keys():
             #         data_pp[idx]['model_data'] = None
         
-        
-        # # check cleaned_data
-        # noisy_traj_idxs = []
-        # for traj_idx, traj in enumerate(cleaned_data):
-        #     acc_data = traj['preprocess']['model_data'][:, 6:]
-        #     noisy_indices = [
-        #         i for i, acc in enumerate(acc_data)
-        #         if any(a < acc_threshold[0] or a > acc_threshold[1] for a in acc)
-        #     ]
-        #     if len(noisy_indices) > 0:
-        #         print(f'Trajectory {traj_idx} has noisy indices: {noisy_indices}')
-        #         noisy_traj_idxs.append(traj_idx)
-        #         # self.plot_acc(traj, note=f'check_temp - Trajectory {traj_idx}')
-        #         # input('Press Enter to continue...')
-        # global_util_printer.print_yellow(f'\n\n\nRECHECK AFTER FILTERING ACC OUTLIER {noisy_traj_idxs}'); input()
-        
         return cleaned_data, outlier_trajectories, traj_idxs_with_noise_treatment
 
     def group_noisy_indices(self, noisy_indices, gap_threshold):
@@ -524,12 +506,12 @@ class DataPreprocess(DataNormalizer):
         group_boundaries = np.where(gaps >= gap_threshold)[0] + 1  # Tìm ranh giới giữa các nhóm
         return [list(group) for group in np.split(noisy_indices, group_boundaries)]
     
-    def plot_traj(self, data, title='', traj_type='raw'):
+    def plot_traj(self, data, traj_type, title=''):
         '''
         traj_type: 'raw' or 'cleaned'
         '''
         if traj_type == 'raw':
-            global_util_plotter.plot_trajectory_dataset_plotly(trajectories=[data['raw']['position']], title=title, rotate_data_whose_y_up=True)
+            global_util_plotter.plot_trajectory_dataset_plotly(trajectories=[data['original']['position']], title=title, rotate_data_whose_y_up=True)
         elif traj_type == 'cleaned':
             global_util_plotter.plot_trajectory_dataset_plotly(trajectories=[data['model_data'][:, :3]], title=title, rotate_data_whose_y_up=True)
         else:
@@ -575,103 +557,51 @@ def main():
     data_raw = RoCatNAEDataRawReader(data_dir).read()
     FS = 120 # Sampling frequency
     CUTOFF = 25 # Cutoff frequency
-    CUBIC_SPLINE = 'spline-k3-s1.0'
+    CUBIC_SPLINE = 'spline-k3-s0'
     data_preprocess = DataPreprocess()
-    enable_data_noise_filter = True
+    s_value, k_value = data_preprocess.get_s_k_values_from_string(CUBIC_SPLINE)
+    print(f"Found SPLINE configure: s: {s_value}, k: {k_value}")
 
-    while(enable_data_noise_filter):
-        # ------------------------------------------------------------
-        # 0. Create a new field 'original' in data_raw to store the original data
-        # ------------------------------------------------------------
-        data_raw = data_preprocess.backup_data(data_raw, object_name)
+    # ------------------------------------------------------------
+    # 0. Create a new field 'original' in data_raw to store the original data
+    # ------------------------------------------------------------
+    data_raw = data_preprocess.backup_data(data_raw, object_name)
 
-        # ------------------------------------------------------------
-        # 1. Apply Butterworth filter and interpolation
-        # ------------------------------------------------------------
-        data_pp = data_preprocess.apply_butterworth_filter(data_raw, cutoff=CUTOFF, freq_samp=FS, butterworth_loop=1, debug=True)
-        input('Done applying ButterWorth filter. Press Enter to continue...')
+    # ------------------------------------------------------------
+    # 1. Apply Butterworth filter and interpolation
+    # ------------------------------------------------------------
+    data_pp = data_preprocess.apply_butterworth_filter(data_raw, cutoff=CUTOFF, freq_samp=FS, butterworth_loop=1, debug=False)
+    input('Done applying ButterWorth filter. Press Enter to continue...')
 
-        # -------------------------------------------
-        # 2. Interpolate velocities and accelerations
-        # -------------------------------------------
-        data_pp = data_preprocess.vel_acc_interpolation(data_pp, interpolate_method=CUBIC_SPLINE)
-        input('Done interpolating velocities and accelerations. Press Enter to continue...')
+    # -------------------------------------------
+    # 2. Interpolate velocities and accelerations
+    # -------------------------------------------
+    data_pp = data_preprocess.vel_acc_interpolation(data_pp, interpolate_method=CUBIC_SPLINE)
+    input('Done interpolating velocities and accelerations. Press Enter to continue...')
 
-        # ------------------------------------------------------------
-        # 3. Filter out outlier trajectories with outlier acceleration
-        # ------------------------------------------------------------
-        cleaned_data, outlier_trajectories, traj_idxs_with_noise_treatment = data_preprocess.detect_acc_outlier(data_pp, acc_threshold=(-30, 30), gap_threshold=3, edge_margin=10, min_len_threshold=65, plot_outlier=False, debug=True)
-        global_util_printer.print_yellow(f'CHECK 111: len(outlier_trajectories): {len(outlier_trajectories)}'); input('Press Enter to continue...')
-
-        data_pp = cleaned_data
-        data_pp = data_preprocess.vel_acc_interpolation(data_pp, interpolate_method=CUBIC_SPLINE)
-
-        # check outlier second time
-        cleaned_data, outlier_trajectories, traj_idxs_with_noise_treatment = data_preprocess.detect_acc_outlier(data_pp, acc_threshold=(-30, 30), gap_threshold=3, edge_margin=10, min_len_threshold=65, plot_outlier=False, debug=True, check_temp=True)
-        global_util_printer.print_yellow(f'CHECK 222: len(outlier_trajectories): {len(outlier_trajectories)}'); input('Press Enter to continue...')
-
-        input('Done filtering outlier trajectories. Press Enter to continue...')
-
-        # if len(outlier_trajectories) == 0:
-        #     enable_data_noise_filter = False
-
-
-    input('Press Enter to continue...')
-    
-
-    #             global_util_printer.print_yellow(f'Trajectory {idx} has outlier acceleration at step {step}')
-    #             print('Acceleration: ', acc_i)
-    #             print('Position: ', traj['position'][step])
-    #             print('Velocity: ', traj['velocity'][step])
-    #             input('Press Enter to continue...')
-
-        # for i in range(3):
-        #     acc_i = acc_data[:, i]
-        #     acc_i_mean = np.mean(acc_i)
-        #     acc_i_std = np.std(acc_i)
-        #     acc_i_outliers = np.where(np.abs(acc_i - acc_i_mean) > 3 * acc_i_std)
-        #     if len(acc_i_outliers[0]) > 0:
-        #         global_util_printer.print_yellow(f'Trajectory {idx} has {len(acc_i_outliers[0])} outliers in acceleration {i}')
-        #         print('Outliers: ', acc_i_outliers)
-        #         print('Mean: ', acc_i_mean)
-        #         print('Std: ', acc_i_std)
-        #         print('Max: ', np.max(acc_i))
-        #         print('Min: ', np.min(acc_i))
-        #         # check if the outliers are significant
-        #         small_outliers = True
-        #         for step in acc_i_outliers[0]:
-        #             if np.abs(acc_i[step] - acc_i_mean) > 0.1:
-        #                 global_util_printer.print_red(f'Step {step} has significant outlier: {acc_i[step]}')
-        #                 small_outliers = False
-        #                 break
-        #         if small_outliers:
-        #             global_util_printer.print_green('SMALL OUTLIERS')
-        #         else:
-        #             global_util_printer.print_yellow('BIG OUTLIERS')
-        #             global_util_plotter.plot_line_chart(x_values=traj['time_step'], y_values=[acc_data[:, 0], acc_data[:, 1], acc_data[:, 2]], title=f'Acceleration - Trajectory {idx}', legends=['acc_x', 'acc_y', 'acc_z'])
-        #             input('Press Enter to continue...')
-
-
-
-
-
+    # ------------------------------------------------------------
+    # 3. Filter out outlier trajectories with outlier acceleration
+    # ------------------------------------------------------------
+    cleaned_data, outlier_trajectories, traj_idxs_with_noise_treatment = data_preprocess.detect_acc_outlier(data_pp, acc_threshold=(-30, 30), gap_threshold=3, edge_margin=25, min_len_threshold=65, plot_outlier=True, debug=True)
+    global_util_printer.print_yellow(f'Number of outlier trajectories: {len(outlier_trajectories)}')
+    data_pp = cleaned_data
+    input('Done filtering outlier trajectories. Press Enter to continue...')
                     
     # ----------------------------------------
-    # 3. Normalize acceleration on all dataset
+    # 4. Normalize acceleration on all dataset
     # ----------------------------------------
     # Check data before normalization
     for idx, traj in enumerate(data_pp):
-        if 'model_data' not in traj:
+        if 'model_data' not in traj['preprocess']:
             raise KeyError(f"'model_data' not found in trajectory {idx}")
-        if traj['model_data'].shape[1] != 9:
-            raise ValueError(f"Trajectory {idx} has fewer than 9 features: {traj['model_data'].shape}")
+        if traj['preprocess']['model_data'].shape[1] != 9:
+            raise ValueError(f"Trajectory {idx} has fewer than 9 features: {traj['preprocess']['model_data'].shape}")
 
     # Ghi nhớ số điểm trong từng quỹ đạo
-    len_list = [len(traj['model_data']) for traj in data_pp]
-    acc_data = [traj['model_data'][:, 6:] for traj in data_pp]
-    acc_flatten = np.vstack(acc_data)  # Gộp toàn bộ quỹ đạo thành 1 mảng 2D
-    # Normalize each column (x, y, z) independently
-    acc_flatten_normed_flatten = data_preprocess.normalize_data(acc_flatten)
+    len_list = [len(traj['preprocess']['model_data']) for traj in data_pp]
+    acc_data_no_norm = [traj['preprocess']['model_data'][:, 6:] for traj in data_pp]
+    acc_flatten = np.vstack(acc_data_no_norm)  # Gộp acc của toàn bộ quỹ đạo thành 1 mảng 2D
+    acc_flatten_normed_flatten = data_preprocess.normalize_data(acc_flatten)    # Normalize each column (x, y, z) independently
     # Tách lại dữ liệu thành danh sách các quỹ đạo
     start_idx = 0
     for idx, length in enumerate(len_list):
