@@ -273,7 +273,7 @@ class DataPreprocess(DataNormalizer):
 
 
     def apply_butterworth_filter(self, data, cutoff, freq_samp, butterworth_loop=1, debug=False):
-        global_util_printer.print_blue('- Applying Butterworth filter', background=True)
+        global_util_printer.print_blue('\n- Applying Butterworth filter', background=True)
         data_pp = []
         for idx, traj in enumerate(data):
             # traj Keys: frame_num, time_step, position, quaternion
@@ -331,7 +331,7 @@ class DataPreprocess(DataNormalizer):
         return data_pp
 
     def vel_acc_interpolation(self, data, interpolate_method='spline-k3-s0'):
-        global_util_printer.print_blue('- Interpolating velocities and accelerations', background=True)
+        global_util_printer.print_blue('\n- Interpolating velocities and accelerations', background=True)
 
         # self.inspect_dict_structure(data[0]); input()
         data_pp = []
@@ -383,7 +383,7 @@ class DataPreprocess(DataNormalizer):
             cleaned_data (list of dict): Dữ liệu đã được xử lý, loại bỏ các điểm nhiễu ở đầu và cuối.
             outlier_trajectories (default dict): Trajectory indices and their noisy indices, which cannot be cleaned and need to manually check.
         """
-        global_util_printer.print_blue('- Detecting acceleration outliers', background=True)
+        global_util_printer.print_blue('\n- Detecting acceleration outliers', background=True)
 
         cleaned_data = []
         outlier_trajectories = defaultdict(list)
@@ -549,6 +549,57 @@ class DataPreprocess(DataNormalizer):
             print(f"  {prefix}{key}")  # In key hiện tại
             self.inspect_dict_structure(d[key], prefix=f"{prefix}{key}.")  # Gọi đệ quy cho keys con
 
+    def normalize_acc_data(self, data):
+        global_util_printer.print_blue('\n- Normalizing acceleration', background=True)
+        # Check data before normalization
+        for idx, traj in enumerate(data):
+            if 'model_data' not in traj['preprocess']:
+                raise KeyError(f"'model_data' not found in trajectory {idx}")
+            if traj['preprocess']['model_data'].shape[1] != 9:
+                raise ValueError(f"Trajectory {idx} has fewer than 9 features: {traj['preprocess']['model_data'].shape}")
+
+        # Ghi nhớ số điểm trong từng quỹ đạo
+        len_list = [len(traj['preprocess']['model_data']) for traj in data]
+        acc_data_no_norm = [traj['preprocess']['model_data'][:, 6:] for traj in data]
+
+
+
+        # Before normalization
+        idx_rand = 0
+        acc_x_no_norm = acc_data_no_norm[idx_rand][:, 0]
+        acc_y_no_norm = acc_data_no_norm[idx_rand][:, 1]
+        acc_z_no_norm = acc_data_no_norm[idx_rand][:, 2]
+        global_util_plotter.plot_line_chart(y_values=[acc_x_no_norm, acc_y_no_norm, acc_z_no_norm], title=f'Acceleration - Before normalization - trajectory {idx_rand}', legends=['acc_x', 'acc_y', 'acc_z'])
+      
+
+        acc_flatten = np.vstack(acc_data_no_norm)  # Gộp acc của toàn bộ quỹ đạo thành 1 mảng 2D
+        acc_flatten_normed_flatten = self.normalize_data(acc_flatten)    # Normalize each column (x, y, z) independently
+        # Tách lại dữ liệu thành danh sách các quỹ đạo
+        start_idx = 0
+        for idx, length in enumerate(len_list):
+            if data[idx]['preprocess']['model_data'][:, 6:].shape != acc_flatten_normed_flatten[start_idx:start_idx + length].shape:
+                raise ValueError(f"Mismatch in shapes for trajectory {idx}")
+            data[idx]['preprocess']['model_data'][:, 6:] = acc_flatten_normed_flatten[start_idx:start_idx + length]
+            start_idx += length
+
+
+        # Plot before and after normalization
+        # check right len:
+        if len(data[idx_rand]['preprocess']['model_data']) != len(acc_data_no_norm[idx_rand]):
+            raise ValueError(f"Mismatch in shapes for trajectory {idx_rand}")
+        # # Before normalization
+        # acc_x_no_norm = acc_data_no_norm[idx_rand][:, 0]
+        # acc_y_no_norm = acc_data_no_norm[idx_rand][:, 1]
+        # acc_z_no_norm = acc_data_no_norm[idx_rand][:, 2]
+        # global_util_plotter.plot_line_chart(y_values=[acc_x_no_norm, acc_y_no_norm, acc_z_no_norm], title=f'Acceleration - Before normalization - trajectory {idx_rand}', legends=['acc_x', 'acc_y', 'acc_z'])
+        
+        # After normalization
+        traj_ran = data[idx_rand]
+        acc_x_norm = traj_ran['preprocess']['model_data'][:, 6]
+        acc_y_norm = traj_ran['preprocess']['model_data'][:, 7]
+        acc_z_norm = traj_ran['preprocess']['model_data'][:, 8]
+        global_util_plotter.plot_line_chart(y_values=[acc_x_norm, acc_y_norm, acc_z_norm], title=f'Acceleration - After normalization - trajectory {idx_rand}', legends=['acc_x', 'acc_y', 'acc_z'])
+    
 
 def main():
     data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bamboo_168'
@@ -589,66 +640,7 @@ def main():
     # ----------------------------------------
     # 4. Normalize acceleration on all dataset
     # ----------------------------------------
-    # Check data before normalization
-    for idx, traj in enumerate(data_pp):
-        if 'model_data' not in traj['preprocess']:
-            raise KeyError(f"'model_data' not found in trajectory {idx}")
-        if traj['preprocess']['model_data'].shape[1] != 9:
-            raise ValueError(f"Trajectory {idx} has fewer than 9 features: {traj['preprocess']['model_data'].shape}")
-
-    # Ghi nhớ số điểm trong từng quỹ đạo
-    len_list = [len(traj['preprocess']['model_data']) for traj in data_pp]
-    acc_data_no_norm = [traj['preprocess']['model_data'][:, 6:] for traj in data_pp]
-    acc_flatten = np.vstack(acc_data_no_norm)  # Gộp acc của toàn bộ quỹ đạo thành 1 mảng 2D
-    acc_flatten_normed_flatten = data_preprocess.normalize_data(acc_flatten)    # Normalize each column (x, y, z) independently
-    # Tách lại dữ liệu thành danh sách các quỹ đạo
-    start_idx = 0
-    for idx, length in enumerate(len_list):
-        if data_pp[idx]['preprocess']['model_data'][:, 6:].shape != acc_flatten_normed_flatten[start_idx:start_idx + length].shape:
-            raise ValueError(f"Mismatch in shapes for trajectory {idx}")
-        data_pp[idx]['preprocess']['model_data'][:, 6:] = acc_flatten_normed_flatten[start_idx:start_idx + length]
-        start_idx += length
-
-
-    # Plot before and after normalization
-    idx_rand = 0
-    # check right len:
-    if len(data_pp[idx_rand]['preprocess']['model_data']) != len(acc_data_no_norm[idx_rand]):
-        raise ValueError(f"Mismatch in shapes for trajectory {idx_rand}")
-    # Before normalization
-    acc_x_no_norm = acc_data_no_norm[idx_rand][:, 0]
-    acc_y_no_norm = acc_data_no_norm[idx_rand][:, 1]
-    acc_z_no_norm = acc_data_no_norm[idx_rand][:, 2]
-    global_util_plotter.plot_line_chart(y_values=[acc_x_no_norm, acc_y_no_norm, acc_z_no_norm], title=f'Acceleration - Before normalization - trajectory {idx_rand}', legends=['acc_x', 'acc_y', 'acc_z'])
-    
-    # After normalization
-    traj_ran = data_pp[idx_rand]
-    acc_x_norm = traj_ran['preprocess']['model_data'][:, 6]
-    acc_y_norm = traj_ran['preprocess']['model_data'][:, 7]
-    acc_z_norm = traj_ran['preprocess']['model_data'][:, 8]
-    global_util_plotter.plot_line_chart(y_values=[acc_x_norm, acc_y_norm, acc_z_norm], title=f'Acceleration - After normalization - trajectory {idx_rand}', legends=['acc_x', 'acc_y', 'acc_z'])
-    
-    # # check ratio of random steps
-    # random_steps = np.random.choice(traj_ran['time_step'], 10)
-    # for step in random_steps:
-    #     idx = np.where(traj_ran['time_step'] == step)[0][0]
-    #     print('Step: ', step)
-    #     acc_raw = traj_ran['acceleration'][idx]
-    #     acc_normed = traj_ran['model_data'][idx, 6:]
-    #     acc_normed_denormed = data_preprocess.denormalize_data([acc_normed])
-    #     # check if they are the same
-    #     if not np.allclose(acc_raw, acc_normed_denormed):
-    #         global_util_printer.print_red('Inaccurate normalization')
-    #     else:
-    #         global_util_printer.print_green('Accurate normalization')
-
-    #     print('     Raw acc: ', acc_raw)
-    #     print('     Normed acc: ', acc_normed)
-    #     print('     Denormed acc: ', acc_normed_denormed)
-    #     print('     Ratio: ', acc_normed / acc_raw)
-
-    #     input('Press Enter to continue...')
-
+    data_pp = data_preprocess.normalize_acc_data(data_pp)
     input('Done normalizing acceleration. Press Enter to continue...')
     # -------------------------
     # 4. Save processed data
