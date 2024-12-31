@@ -11,6 +11,7 @@ import joblib  # Để lưu scaler
 from tqdm import tqdm
 from collections import defaultdict
 import copy
+import random
 
 from nae_core.utils.submodules.preprocess_utils.data_raw_reader import RoCatRLLabDataRawReader, RoCatNAEDataRawReader
 
@@ -257,17 +258,18 @@ class DataPreprocess(DataNormalizer):
     def run(self, trajectories, fs, cutoff):
         pass
 
-    def save_processed_data(self, data_pp, object_name):
+    def save_processed_data(self, data, data_type, object_name):
         # get current path
         current_path = os.path.dirname(os.path.realpath(__file__))
         # get parent path
         parent_path = os.path.abspath(os.path.join(current_path, os.pardir))
-        output_dir = os.path.join(parent_path, 'data_preprocessed', object_name)
+        output_dir = os.path.join(parent_path, 'data_preprocessed', object_name, f'{data_type}-{len(data)}')
         # create folder if not exist
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
-        for idx, traj in enumerate(data_pp):
+        for traj in data:
+            idx = traj['original']['idx_org']
             np.save(os.path.join(output_dir, f'pp_{object_name}_traj_{idx}.npy'), traj, allow_pickle=True)
         global_util_printer.print_green(f'Saved processed data to {output_dir}')
 
@@ -601,6 +603,25 @@ class DataPreprocess(DataNormalizer):
             global_util_plotter.plot_line_chart(y_values=[acc_x_norm, acc_y_norm, acc_z_norm], title=f'Acceleration - After normalization - trajectory {idx_rand}', legends=['acc_x', 'acc_y', 'acc_z'])
 
         return data
+    
+    def split_data(self, data, split_ratio_train_val_test=(0.8, 0.1, 0.1), shuffle=True):
+        global_util_printer.print_blue('\n- Splitting data into train, val, test', background=True)
+        # check ratio sum
+        if sum(split_ratio_train_val_test) != 1:
+            raise ValueError("The sum of split_ratio_train_val_test must be 1")
+        if shuffle:
+            for _ in range(10):
+                random.shuffle(data)
+        num_data = len(data)
+        num_train = int(num_data * split_ratio_train_val_test[0])
+        num_val = int(num_data * split_ratio_train_val_test[1])
+        num_test = num_data - num_train - num_val
+        data_train = data[:num_train]
+        data_val = data[num_train:num_train + num_val]
+        data_test = data[num_train + num_val:]
+        global_util_printer.print_green(f'Split data into train: {num_train}, val: {num_val}, test: {num_test}')
+        return data_train, data_val, data_test
+
 
 def main():
     data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bamboo_168'
@@ -653,13 +674,18 @@ def main():
     #     print(f'{idx} - Ratio: {acc_no_norm[0] / acc_norm[0]} - {acc_no_norm[1] / acc_norm[1]} - {acc_no_norm[2] / acc_norm[2]}')
     #     input()
 
+    # ----------------------------------------
+    # 5. Split data into train, val, test
+    # ----------------------------------------
+    data_train, data_val, data_test = data_preprocess.split_data(data_pp, split_ratio_train_val_test=(0.8, 0.1, 0.1), shuffle=True)
+    
     # -------------------------
-    # 5. Save processed data
+    # 6. Save processed data
     # -------------------------
     # save processed data
-    data_preprocess.save_processed_data(data_pp, object_name)
+    data_preprocess.save_processed_data(data=data_train, data_type='data_train', object_name=object_name)
+    data_preprocess.save_processed_data(data=data_val, data_type='data_val', object_name=object_name)
+    data_preprocess.save_processed_data(data=data_test, data_type='data_test', object_name=object_name)
 
-        # global_util_plotter.plot_trajectory_dataset_plotly([old_traj, new_traj], title='', rotate_data_whose_y_up=True)
-        # input('Press Enter to continue with the next trajectory...')
 if __name__ == '__main__':
     main()
