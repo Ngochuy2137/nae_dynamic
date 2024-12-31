@@ -57,7 +57,6 @@ class DataNormalizer:
             raise ValueError("Scaler chưa được khởi tạo.")
         joblib.dump(self.scaler, scaler_path)
         global_util_printer.print_green(f'Saved scaler to {scaler_path}')
-        input('Press Enter to continue...')
 
     def load_scaler(self, path):
         self.scaler = joblib.load(path)
@@ -605,46 +604,52 @@ def main():
     # Tách lại dữ liệu thành danh sách các quỹ đạo
     start_idx = 0
     for idx, length in enumerate(len_list):
-        if data_pp[idx]['model_data'][:, 6:].shape != acc_flatten_normed_flatten[start_idx:start_idx + length].shape:
+        if data_pp[idx]['preprocess']['model_data'][:, 6:].shape != acc_flatten_normed_flatten[start_idx:start_idx + length].shape:
             raise ValueError(f"Mismatch in shapes for trajectory {idx}")
-        data_pp[idx]['model_data'][:, 6:] = acc_flatten_normed_flatten[start_idx:start_idx + length]
+        data_pp[idx]['preprocess']['model_data'][:, 6:] = acc_flatten_normed_flatten[start_idx:start_idx + length]
         start_idx += length
 
 
     # Plot before and after normalization
     idx_rand = 0
-    traj_ran = data_pp[idx_rand]
-    acc_x = traj_ran['acceleration'][:, 0]
-    acc_y = traj_ran['acceleration'][:, 1]
-    acc_z = traj_ran['acceleration'][:, 2]
-    # global_util_plotter.plot_line_chart(x_values=traj_ran['time_step'], y_values=[acc_x, acc_y, acc_z], title=f'Acceleration - Before normalization - trajectory {idx_rand}', legends=['acc_x', 'acc_y', 'acc_z'])
-    acc_x_norm = traj_ran['model_data'][:, 6]
-    acc_y_norm = traj_ran['model_data'][:, 7]
-    acc_z_norm = traj_ran['model_data'][:, 8]
-    # global_util_plotter.plot_line_chart(x_values=traj_ran['time_step'], y_values=[acc_x_norm, acc_y_norm, acc_z_norm], title=f'Acceleration - After normalization - trajectory {idx_rand}', legends=['acc_x', 'acc_y', 'acc_z'])
+    # check right len:
+    if len(data_pp[idx_rand]['preprocess']['model_data']) != len(acc_data_no_norm[idx_rand]):
+        raise ValueError(f"Mismatch in shapes for trajectory {idx_rand}")
+    # Before normalization
+    acc_x_no_norm = acc_data_no_norm[idx_rand][:, 0]
+    acc_y_no_norm = acc_data_no_norm[idx_rand][:, 1]
+    acc_z_no_norm = acc_data_no_norm[idx_rand][:, 2]
+    global_util_plotter.plot_line_chart(y_values=[acc_x_no_norm, acc_y_no_norm, acc_z_no_norm], title=f'Acceleration - Before normalization - trajectory {idx_rand}', legends=['acc_x', 'acc_y', 'acc_z'])
     
-    # check ratio of random steps
-    random_steps = np.random.choice(traj_ran['time_step'], 10)
-    for step in random_steps:
-        idx = np.where(traj_ran['time_step'] == step)[0][0]
-        print('Step: ', step)
-        acc_raw = traj_ran['acceleration'][idx]
-        acc_normed = traj_ran['model_data'][idx, 6:]
-        acc_normed_denormed = data_preprocess.denormalize_data([acc_normed])
-        # check if they are the same
-        if not np.allclose(acc_raw, acc_normed_denormed):
-            global_util_printer.print_red('Inaccurate normalization')
-        else:
-            global_util_printer.print_green('Accurate normalization')
+    # After normalization
+    traj_ran = data_pp[idx_rand]
+    acc_x_norm = traj_ran['preprocess']['model_data'][:, 6]
+    acc_y_norm = traj_ran['preprocess']['model_data'][:, 7]
+    acc_z_norm = traj_ran['preprocess']['model_data'][:, 8]
+    global_util_plotter.plot_line_chart(y_values=[acc_x_norm, acc_y_norm, acc_z_norm], title=f'Acceleration - After normalization - trajectory {idx_rand}', legends=['acc_x', 'acc_y', 'acc_z'])
+    
+    # # check ratio of random steps
+    # random_steps = np.random.choice(traj_ran['time_step'], 10)
+    # for step in random_steps:
+    #     idx = np.where(traj_ran['time_step'] == step)[0][0]
+    #     print('Step: ', step)
+    #     acc_raw = traj_ran['acceleration'][idx]
+    #     acc_normed = traj_ran['model_data'][idx, 6:]
+    #     acc_normed_denormed = data_preprocess.denormalize_data([acc_normed])
+    #     # check if they are the same
+    #     if not np.allclose(acc_raw, acc_normed_denormed):
+    #         global_util_printer.print_red('Inaccurate normalization')
+    #     else:
+    #         global_util_printer.print_green('Accurate normalization')
 
-        print('     Raw acc: ', acc_raw)
-        print('     Normed acc: ', acc_normed)
-        print('     Denormed acc: ', acc_normed_denormed)
-        print('     Ratio: ', acc_normed / acc_raw)
+    #     print('     Raw acc: ', acc_raw)
+    #     print('     Normed acc: ', acc_normed)
+    #     print('     Denormed acc: ', acc_normed_denormed)
+    #     print('     Ratio: ', acc_normed / acc_raw)
 
-        input('Press Enter to continue...')
+    #     input('Press Enter to continue...')
 
-    input()
+    input('Done normalizing acceleration. Press Enter to continue...')
     # -------------------------
     # 4. Save processed data
     # -------------------------
