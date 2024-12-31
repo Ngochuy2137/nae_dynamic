@@ -28,13 +28,13 @@ class DataNormalizer:
             raise ValueError("Bạn cần cung cấp scaler_path hoặc range_norm.")
         self.range_norm = range_norm
 
-    def normalize_data(self, data):
+    def normalize_data(self, data, object_name):
         if self.scaler is None:
             raise ValueError("Scaler chưa được khởi tạo.")
         data_normed = self.scaler.fit_transform(data)
         save_scaler = input('Do you want to save the scaler? (y/n): ')
         if save_scaler == 'y':
-            self.save_scaler()
+            self.save_scaler(object_name)
         return data_normed
     
     def denormalize_data(self, data_normalized):
@@ -42,12 +42,12 @@ class DataNormalizer:
             raise ValueError("Scaler chưa được khởi tạo.")
         return self.scaler.inverse_transform(data_normalized)
 
-    def save_scaler(self,):
+    def save_scaler(self, object_name):
         # get current path
         current_path = os.path.dirname(os.path.realpath(__file__))
         # get parent path
         parent_path = os.path.abspath(os.path.join(current_path, os.pardir))
-        parent_path = os.path.join(parent_path, 'data_preprocessed', 'normalization')
+        parent_path = os.path.join(parent_path, 'data_preprocessed', object_name, 'normalization')
         # create folder if not exist
         if not os.path.exists(parent_path):
             os.makedirs(parent_path)
@@ -262,7 +262,7 @@ class DataPreprocess(DataNormalizer):
         current_path = os.path.dirname(os.path.realpath(__file__))
         # get parent path
         parent_path = os.path.abspath(os.path.join(current_path, os.pardir))
-        output_dir = os.path.join(parent_path, 'data_preprocessed')
+        output_dir = os.path.join(parent_path, 'data_preprocessed', object_name)
         # create folder if not exist
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
@@ -333,30 +333,37 @@ class DataPreprocess(DataNormalizer):
     def vel_acc_interpolation(self, data, interpolate_method='spline-k3-s0'):
         global_util_printer.print_blue('\n- Interpolating velocities and accelerations', background=True)
 
-        # self.inspect_dict_structure(data[0]); input()
-        data_pp = []
-        for idx, traj in enumerate(data):
-            # traj Keys: frame_num, time_step, position, quaternion
-            if 'position'in traj['preprocess']:
-                # pos_seq = traj['preprocess']['position'].copy()
-                pos_seq = copy.deepcopy(traj['preprocess']['position']) # use deepcopy to avoid changing the original data
-            elif 'model_data' in traj['preprocess']:
-                # pos_seq = traj['preprocess']['model_data'][:, :3].copy()
-                pos_seq = copy.deepcopy(traj['preprocess']['model_data'][:, :3])    # use deepcopy to avoid changing the original data
+        # check if data has available fields
+        if 'position'in data[0]['preprocess']:
+            source_field = 'preprocess'
+        elif 'position' in data[0]['original']:
+            global_util_printer.print_yellow('Cannot find position data in "preprocess" field. Do you want to use position data in "original" field instead [y/n] ?')
+            ans = input()
+            if ans == 'y':
+                source_field = 'original'
             else:
                 raise ValueError("No position data in preprocess data.")
+        else:
+            raise ValueError("No position data in preprocess data.")
+        
+        data_pp = []
+        for idx, traj in enumerate(data):
+            # traj Keys of field 'original': frame_num, time_step, position, quaternion
+            # pos_seq = traj[source_field]['position'].copy()
+            pos_seq = copy.deepcopy(traj[source_field]['position']) # use deepcopy to avoid changing the original data
+            time_seq = traj[source_field]['time_step']
+
             vel_seq = []
             acc_seq = []
-
             # for x, y, z
             for i in range(3):
-                vel_i = self.vel_interpolation(pos_seq[:, i], traj['preprocess']['time_step'], method=interpolate_method)
-                acc_i = self.acc_interpolation(pos_seq[:, i], traj['preprocess']['time_step'], method=interpolate_method)
+                vel_i = self.vel_interpolation(pos_seq[:, i], time_seq, method=interpolate_method)
+                acc_i = self.acc_interpolation(pos_seq[:, i], time_seq, method=interpolate_method)
                 vel_seq.append(vel_i)
                 acc_seq.append(acc_i)
             vel_seq = np.array(vel_seq).T
             acc_seq = np.array(acc_seq).T
-            # global_util_plotter.plot_line_chart(x_values=traj['preprocess']['time_step'], y_values=[acc_seq[:, 0], acc_seq[:, 1], acc_seq[:, 2]], title='Acceleration - With ButterWorth filter', legends=['acc_x', 'acc_y', 'acc_z'])
+            # global_util_plotter.plot_line_chart(x_values=time_seq, y_values=[acc_seq[:, 0], acc_seq[:, 1], acc_seq[:, 2]], title='Acceleration - With ButterWorth filter', legends=['acc_x', 'acc_y', 'acc_z'])
 
             new_traj_dict = defaultdict(dict)
             new_traj_dict['original'] = traj['original']
@@ -389,8 +396,6 @@ class DataPreprocess(DataNormalizer):
         outlier_trajectories = defaultdict(list)
         traj_idxs_with_noise_treatment = []
 
-
-        # count_flag_0 = 0
         for traj_idx, traj in enumerate(data_raw):
             # global_util_printer.print_yellow(f'Processing traj {traj_idx}...')
             acc_data = traj['preprocess']['model_data'][:, 6:]  # Lấy dữ liệu gia tốc (ax, ay, az)
@@ -408,8 +413,6 @@ class DataPreprocess(DataNormalizer):
             if not noisy_indices:
                 # Không có nhiễu, thêm quỹ đạo vào danh sách đã xử lý
                 cleaned_data.append(traj)
-                # count_flag_0 += 1
-                # if check_temp: print('count_flag_0: ', count_flag_0)
                 continue
             if len_traj_org - len(noisy_indices) < min_len_threshold:
                 outlier_trajectories[traj_idx] = noisy_indices
@@ -518,9 +521,12 @@ class DataPreprocess(DataNormalizer):
 
     def plot_acc(self, data, note=''):
         acc = data['preprocess']['model_data'][:, 6:]
-        global_util_plotter.plot_line_chart(y_values=[acc[:, 0], acc[:, 1], acc[:, 2]], title=f'Acceleration - {note}', x_label='Time step', y_label='Acceleration', legends=['acc_x', 'acc_y', 'acc_z'])
+        global_util_plotter.plot_line_chart(y_values=[acc[:, 0], acc[:, 1], acc[:, 2]], title=f'Acceleration - {note}', x_label='Frames', y_label='Acceleration m/s\u00b2', legends=['acc_x', 'acc_y', 'acc_z'])
     
     def backup_data(self, data, object_name):
+        '''
+        save original data to 'original' field
+        '''
         for idx, traj in enumerate(data):
             traj_dict = defaultdict(dict)
             # traj_dict['original'] = {key: value.copy() for key, value in traj.items()}
@@ -549,7 +555,7 @@ class DataPreprocess(DataNormalizer):
             print(f"  {prefix}{key}")  # In key hiện tại
             self.inspect_dict_structure(d[key], prefix=f"{prefix}{key}.")  # Gọi đệ quy cho keys con
 
-    def normalize_acc_data(self, data, debug=False):
+    def normalize_acc_data(self, data, object_name, debug=False):
         global_util_printer.print_blue('\n- Normalizing acceleration', background=True)
         # Check data before normalization
         for idx, traj in enumerate(data):
@@ -562,7 +568,7 @@ class DataPreprocess(DataNormalizer):
         len_list = [len(traj['preprocess']['model_data']) for traj in data]
         acc_data_no_norm = [traj['preprocess']['model_data'][:, 6:].copy() for traj in data]    # need to copy, unless, acc_data_no_norm is only view of data and it will be changed in the next steps
         acc_flatten = np.vstack(acc_data_no_norm)  # Gộp acc của toàn bộ quỹ đạo thành 1 mảng 2D
-        acc_flatten_normed_flatten = self.normalize_data(acc_flatten)    # Normalize each column (x, y, z) independently
+        acc_flatten_normed_flatten = self.normalize_data(acc_flatten, object_name)    # Normalize each column (x, y, z) independently
         
         # Tách lại dữ liệu thành danh sách các quỹ đạo
         start_idx = 0
@@ -593,7 +599,8 @@ class DataPreprocess(DataNormalizer):
             acc_y_norm = traj_ran['preprocess']['model_data'][:, 7]
             acc_z_norm = traj_ran['preprocess']['model_data'][:, 8]
             global_util_plotter.plot_line_chart(y_values=[acc_x_norm, acc_y_norm, acc_z_norm], title=f'Acceleration - After normalization - trajectory {idx_rand}', legends=['acc_x', 'acc_y', 'acc_z'])
-    
+
+        return data
 
 def main():
     data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bamboo_168'
@@ -609,12 +616,12 @@ def main():
     # ------------------------------------------------------------
     # 0. Create a new field 'original' in data_raw to store the original data
     # ------------------------------------------------------------
-    data_raw = data_preprocess.backup_data(data_raw, object_name)
+    data_pp = data_preprocess.backup_data(data_raw, object_name)
 
     # ------------------------------------------------------------
     # 1. Apply Butterworth filter and interpolation
     # ------------------------------------------------------------
-    data_pp = data_preprocess.apply_butterworth_filter(data_raw, cutoff=CUTOFF, freq_samp=FS, butterworth_loop=1, debug=False)
+    data_pp = data_preprocess.apply_butterworth_filter(data_pp, cutoff=CUTOFF, freq_samp=FS, butterworth_loop=1, debug=False)
     input('Done applying ButterWorth filter. Press Enter to continue...')
 
     # -------------------------------------------
@@ -626,22 +633,29 @@ def main():
     # ------------------------------------------------------------
     # 3. Filter out outlier trajectories with outlier acceleration
     # ------------------------------------------------------------
-    cleaned_data, outlier_trajectories, traj_idxs_with_noise_treatment = data_preprocess.detect_acc_outlier(data_pp, acc_threshold=(-30, 30), gap_threshold=3, edge_margin=25, min_len_threshold=65, plot_outlier=True, debug=True)
+    cleaned_data, outlier_trajectories, traj_idxs_with_noise_treatment = data_preprocess.detect_acc_outlier(data_pp, acc_threshold=(-30, 30), gap_threshold=3, edge_margin=25, min_len_threshold=65, plot_outlier=False, debug=False)
     global_util_printer.print_yellow(f'Number of outlier trajectories: {len(outlier_trajectories)}')
     data_pp = cleaned_data
     input('Done filtering outlier trajectories. Press Enter to continue...')
                     
+    acc_data_no_norm = data_pp[0]['preprocess']['model_data'][:, 6:].copy()
     # ----------------------------------------
     # 4. Normalize acceleration on all dataset
     # ----------------------------------------
-    data_pp = data_preprocess.normalize_acc_data(data_pp, debug=False)
+    data_pp = data_preprocess.normalize_acc_data(data_pp, object_name, debug=False)
     input('Done normalizing acceleration. Press Enter to continue...')
+    # # plot acc
+    # data_preprocess.plot_acc(data_pp[0], note='Trajectory 0 - After normalization'); input()
+
+    # # check ratio of data after normalization
+    # acc_data_norm = data_pp[0]['preprocess']['model_data'][:, 6:].copy()
+    # for idx, acc_no_norm, acc_norm in zip(range(len(acc_data_no_norm)), acc_data_no_norm, acc_data_norm):
+    #     print(f'{idx} - Ratio: {acc_no_norm[0] / acc_norm[0]} - {acc_no_norm[1] / acc_norm[1]} - {acc_no_norm[2] / acc_norm[2]}')
+    #     input()
 
     # -------------------------
     # 5. Save processed data
     # -------------------------
-
-
     # save processed data
     data_preprocess.save_processed_data(data_pp, object_name)
 
