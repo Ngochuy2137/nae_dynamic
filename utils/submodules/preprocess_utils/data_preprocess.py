@@ -13,7 +13,7 @@ from collections import defaultdict
 import copy
 import random
 
-from nae_core.utils.submodules.preprocess_utils.data_raw_reader import RoCatRLLabDataRawReader, RoCatNAEDataRawReader
+from nae_core.utils.submodules.preprocess_utils.data_raw_reader import RoCatDataRawReader
 
 global_util_plotter = Plotter()
 global_util_printer = Printer()
@@ -270,7 +270,10 @@ class DataPreprocess(DataNormalizer):
 
         for traj in data:
             idx = traj['original']['idx_org']
-            np.save(os.path.join(output_dir, f'pp_{object_name}_traj_{idx}.npy'), traj, allow_pickle=True)
+            # Save as .npz instead of .npy
+            output_file = os.path.join(output_dir, f'pp_{object_name}_traj_{idx}.npz')
+            # Save the whole trajectory dictionary in .npz format
+            np.savez(output_file, **traj)
         global_util_printer.print_green(f'Saved processed data to {output_dir}')
 
 
@@ -610,7 +613,7 @@ class DataPreprocess(DataNormalizer):
         if sum(split_ratio_train_val_test) != 1:
             raise ValueError("The sum of split_ratio_train_val_test must be 1")
         if shuffle:
-            for _ in range(10):
+            for _ in range(5):
                 random.shuffle(data)
         num_data = len(data)
         num_train = int(num_data * split_ratio_train_val_test[0])
@@ -626,7 +629,7 @@ class DataPreprocess(DataNormalizer):
 def main():
     data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bamboo_168'
     object_name = 'Bamboo'
-    data_raw = RoCatNAEDataRawReader(data_dir).read()
+    data_raw = RoCatDataRawReader(data_dir).read()
     FS = 120 # Sampling frequency
     CUTOFF = 25 # Cutoff frequency
     CUBIC_SPLINE = 'spline-k3-s0'
