@@ -549,7 +549,7 @@ class DataPreprocess(DataNormalizer):
             print(f"  {prefix}{key}")  # In key hiện tại
             self.inspect_dict_structure(d[key], prefix=f"{prefix}{key}.")  # Gọi đệ quy cho keys con
 
-    def normalize_acc_data(self, data):
+    def normalize_acc_data(self, data, debug=False):
         global_util_printer.print_blue('\n- Normalizing acceleration', background=True)
         # Check data before normalization
         for idx, traj in enumerate(data):
@@ -560,20 +560,10 @@ class DataPreprocess(DataNormalizer):
 
         # Ghi nhớ số điểm trong từng quỹ đạo
         len_list = [len(traj['preprocess']['model_data']) for traj in data]
-        acc_data_no_norm = [traj['preprocess']['model_data'][:, 6:] for traj in data]
-
-
-
-        # Before normalization
-        idx_rand = 0
-        acc_x_no_norm = acc_data_no_norm[idx_rand][:, 0]
-        acc_y_no_norm = acc_data_no_norm[idx_rand][:, 1]
-        acc_z_no_norm = acc_data_no_norm[idx_rand][:, 2]
-        global_util_plotter.plot_line_chart(y_values=[acc_x_no_norm, acc_y_no_norm, acc_z_no_norm], title=f'Acceleration - Before normalization - trajectory {idx_rand}', legends=['acc_x', 'acc_y', 'acc_z'])
-      
-
+        acc_data_no_norm = [traj['preprocess']['model_data'][:, 6:].copy() for traj in data]    # need to copy, unless, acc_data_no_norm is only view of data and it will be changed in the next steps
         acc_flatten = np.vstack(acc_data_no_norm)  # Gộp acc của toàn bộ quỹ đạo thành 1 mảng 2D
         acc_flatten_normed_flatten = self.normalize_data(acc_flatten)    # Normalize each column (x, y, z) independently
+        
         # Tách lại dữ liệu thành danh sách các quỹ đạo
         start_idx = 0
         for idx, length in enumerate(len_list):
@@ -582,23 +572,27 @@ class DataPreprocess(DataNormalizer):
             data[idx]['preprocess']['model_data'][:, 6:] = acc_flatten_normed_flatten[start_idx:start_idx + length]
             start_idx += length
 
-
-        # Plot before and after normalization
-        # check right len:
-        if len(data[idx_rand]['preprocess']['model_data']) != len(acc_data_no_norm[idx_rand]):
-            raise ValueError(f"Mismatch in shapes for trajectory {idx_rand}")
-        # # Before normalization
-        # acc_x_no_norm = acc_data_no_norm[idx_rand][:, 0]
-        # acc_y_no_norm = acc_data_no_norm[idx_rand][:, 1]
-        # acc_z_no_norm = acc_data_no_norm[idx_rand][:, 2]
-        # global_util_plotter.plot_line_chart(y_values=[acc_x_no_norm, acc_y_no_norm, acc_z_no_norm], title=f'Acceleration - Before normalization - trajectory {idx_rand}', legends=['acc_x', 'acc_y', 'acc_z'])
+        # check correction after normalization
+        for i in range(len(data)):
+            if len(data[i]['preprocess']['model_data']) != len(acc_data_no_norm[i]):
+                raise ValueError(f"Mismatch in shapes for trajectory {i} after normalization")
         
-        # After normalization
-        traj_ran = data[idx_rand]
-        acc_x_norm = traj_ran['preprocess']['model_data'][:, 6]
-        acc_y_norm = traj_ran['preprocess']['model_data'][:, 7]
-        acc_z_norm = traj_ran['preprocess']['model_data'][:, 8]
-        global_util_plotter.plot_line_chart(y_values=[acc_x_norm, acc_y_norm, acc_z_norm], title=f'Acceleration - After normalization - trajectory {idx_rand}', legends=['acc_x', 'acc_y', 'acc_z'])
+        if debug:
+            # Plot before and after normalization
+            # check right len:
+            idx_rand = 0
+            # Before normalization
+            acc_x_no_norm = acc_data_no_norm[idx_rand][:, 0]
+            acc_y_no_norm = acc_data_no_norm[idx_rand][:, 1]
+            acc_z_no_norm = acc_data_no_norm[idx_rand][:, 2]
+            global_util_plotter.plot_line_chart(y_values=[acc_x_no_norm, acc_y_no_norm, acc_z_no_norm], title=f'Acceleration - Before normalization - trajectory {idx_rand}', legends=['acc_x', 'acc_y', 'acc_z'])
+            
+            # After normalization
+            traj_ran = data[idx_rand]
+            acc_x_norm = traj_ran['preprocess']['model_data'][:, 6]
+            acc_y_norm = traj_ran['preprocess']['model_data'][:, 7]
+            acc_z_norm = traj_ran['preprocess']['model_data'][:, 8]
+            global_util_plotter.plot_line_chart(y_values=[acc_x_norm, acc_y_norm, acc_z_norm], title=f'Acceleration - After normalization - trajectory {idx_rand}', legends=['acc_x', 'acc_y', 'acc_z'])
     
 
 def main():
@@ -640,10 +634,11 @@ def main():
     # ----------------------------------------
     # 4. Normalize acceleration on all dataset
     # ----------------------------------------
-    data_pp = data_preprocess.normalize_acc_data(data_pp)
+    data_pp = data_preprocess.normalize_acc_data(data_pp, debug=False)
     input('Done normalizing acceleration. Press Enter to continue...')
+
     # -------------------------
-    # 4. Save processed data
+    # 5. Save processed data
     # -------------------------
 
 
