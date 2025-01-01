@@ -15,40 +15,21 @@ def main():
     id_traj = 'last 70 frames'
     filter_key = 'len_left'
     filter_value = 'goal_error'
-    ## ----------------- 1. Bamboo -----------------
-    # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/nae_paper_dataset/new_data_format/bamboo/split/bamboo'
+    # ## ----------------- 1. Bamboo -----------------
+    # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/data_preprocessed/Bamboo'
     # thrown_object = 'bamboo'
-    # parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/Done-Finetune-bamboo_model/after-finetune-gourd-model_22-12-2024_17-20-21_hiddensize128'
-    # epoch_idx = 2070 # 880 1510 1550 1960 2070
+    # parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bamboo_model/bamboo-model_01-01-2025_06-58-11_hiddensize128'
+    # epoch_idx = 1220 # 1210 1220
     # saved_model_dir = glob.glob(f'{parent_dir}/*epochs{epoch_idx}*')[0]
 
 
-
-    ## ----------------- 3. gourd -----------------
-    # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/nae_paper_dataset/new_data_format/gourd/split/gourd'
-    # thrown_object = 'gourd'
-    # parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/backup/gourd-TORCH21-NEW_model/0-model_21-12-2024_04-57-06_hiddensize128-origin'
-    # epoch_idx = 0
-    # saved_model_dir = glob.glob(f'{parent_dir}/*epochs{epoch_idx}*')[0]
-
-
-    ## ----------------- 4. Green -----------------
-    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/nae_paper_dataset/new_data_format/green/split/green'
-    thrown_object = 'green'
-    parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/Done-Finetune-green_model/green-model_23-12-2024_19-41-52_hiddensize128'
-    epoch_idx = 890      # 890 1040
+    # ## ----------------- 3. Bottle -----------------\
+    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/data_preprocessed/Bottle'
+    thrown_object = 'bottle'
+    parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-lr5e-5_model/bottle-lr5e-5-model_01-01-2025_22-28-52_hiddensize128'
+    epoch_idx = 6900
     saved_model_dir = glob.glob(f'{parent_dir}/*epochs{epoch_idx}*')[0]
     
-
-
-
-
-    # ----------------- 6. Paige -----------------
-    # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/nae_paper_dataset/new_data_format/paige/split/paige'
-    # thrown_object = 'paige'
-    # saved_model_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/models/paige-dynamic-len_model/NAE_DYNAMIC-model_15-12-2024_16-01-02_hiddensize128/epochs940_data15761_batchsize256_hiddensize128_timemin27-9_NAE_DYNAMIC'
-
-
     # Training parameters 
     training_params = {
         'num_epochs': 5000,
@@ -71,9 +52,7 @@ def main():
     nae = NAEDynamicLSTM(**model_params, **training_params, data_dir=data_dir, device=device)
     # load data
     nae_data_loader = NAEDataLoader()
-    data_train_raw, data_val_raw, data_test_raw = nae_data_loader.load_dataset(data_dir)
-    if not nae.data_correction_check(data_train_raw, data_val_raw, data_test_raw):
-        return
+    data_train_raw, data_val_raw, data_test_raw = nae_data_loader.load_train_val_test_dataset(data_dir)
     # prepare data for training
     epoch_idx = nae.load_model(saved_model_dir, weights_only=True)
     if epoch_idx is None:
