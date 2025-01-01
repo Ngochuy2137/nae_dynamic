@@ -224,7 +224,7 @@ class VLSLSTM(nn.Module):
 #------------------------- TRAINING -------------------------
 class NAEDynamicLSTM():
     def __init__(self, input_size, hidden_size, output_size, num_layers_lstm, lr, 
-                 num_epochs, batch_size_train, batch_size_val, save_interval, thrown_object, train_id, dropout_rate, warmup_steps=0, loss2_weight=1.0, loss2_1_weight=0.0, weight_decay=1e-4,
+                 num_epochs, batch_size_train, batch_size_val, save_interval, thrown_object, train_id, dropout_rate, warmup_steps=0, loss1_weight=1.0, loss2_weight=1.0, loss2_1_weight=0.0, weight_decay=1e-4,
                  device=torch.device('cuda'),
                  data_dir=''):
         self.utils = NAE_Utils()
@@ -244,6 +244,7 @@ class NAEDynamicLSTM():
         self.thrown_object = thrown_object + '_model'
         self.data_dir = data_dir
         self.warmup_steps = warmup_steps
+        self.loss1_weight = loss1_weight
         self.loss2_weight = loss2_weight
         self.loss2_1_weight = loss2_1_weight
 
@@ -452,7 +453,7 @@ class NAEDynamicLSTM():
                                 input('DEBUG')
 
                             
-                            loss_mean = loss_1_mean + self.loss2_weight*loss_2_mean + loss_3_mean + self.loss2_1_weight * loss_2_1_mean
+                            loss_mean = self.loss1_weight*loss_1_mean + self.loss2_weight*loss_2_mean + loss_3_mean + self.loss2_1_weight * loss_2_1_mean
 
                             # time_flag_3 = time.time() # loss cal time
 
