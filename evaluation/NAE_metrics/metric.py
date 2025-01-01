@@ -30,12 +30,12 @@ class Metric(ABC):
                 return False
         return True
     
-    @abstractmethod
-    def compute(self):
-        """
-        Compute and return the metric value.
-        """
-        pass
+    # @abstractmethod
+    # def compute(self):
+    #     """
+    #     Compute and return the metric value.
+    #     """
+    #     pass
 
     @abstractmethod
     def process_and_plot(self):
@@ -80,18 +80,6 @@ class Metric(ABC):
             for key, errors in grouped_data.items()
         ]
 
-        # for key, errors in grouped_data.items():
-        #     if key == 3:
-        #         print(f'{key}: {errors}')
-        #         mean_err = np.mean(errors)
-        #         deviations = np.abs(errors - mean_err)
-        #         # find index of max deviation
-        #         idx_max_dev = np.argmax(deviations)
-        #         print('total: ', len(errors))
-        #         print(f'idx_max_dev: {idx_max_dev}, err: {errors[idx_max_dev]}, dev: {deviations[idx_max_dev]}')
-
-        # input()
-
         # Sắp xếp kết quả
         if key_filter == 'len_left':
             result.sort(key=lambda x: x[key_filter], reverse=True)  # Sắp xếp giảm dần
@@ -114,18 +102,8 @@ class Metric(ABC):
         dis_all = np.linalg.norm(pred - lab, axis=-1)
         accumulated_error = np.mean(dis_all)
         return accumulated_error
-
-class MetricAccumulatedError(Metric):
-    def __init__(self):
-        super().__init__()  # call the parent class constructor
-        
+    
     def compute(self, input_seqs, label_seqs, predicted_seqs):
-        '''
-        We will examine how the accumulated error changes with increasing input length
-        The input data length is increased by 1 data point each time
-        The input_seqs includes input seqs with increasing length
-        (We will get mean accumulated error for each input length)
-        '''
         # 0. check if the prediction is proper:
         if not self.is_proper_prediction(input_seqs, label_seqs):
             self.util_printer.print_red(f'{len(input_seqs)} labels are incorrect')
@@ -133,20 +111,64 @@ class MetricAccumulatedError(Metric):
         self.util_printer.print_green(f'{len(input_seqs)} labels are correct')
 
         # 1. Calculate accumulated error for each prediction
-        accumulated_error_by_input_length = []
+        err_by_in_len = []
+        # count = 0
 
         # Consider one group (input, label, predicted) at a time
         for inp, pred, lab in zip(input_seqs, predicted_seqs, label_seqs):
+            # Only calculate the error for last point
+            last_err = self.compute_goal_error(pred, lab)
+            accumulated_error = self.compute_accumulated_error(lab, pred)
+
+            err_element = {
+                'input_len': len(inp),
+                'len_left': len(lab) - len(inp),
+                'goal_error': last_err,
+                'accumulated_error': accumulated_error
+            }
+            err_by_in_len.append(err_element) 
+        return err_by_in_len
+
+
+class MetricAccumulatedError(Metric):
+    def __init__(self):
+        super().__init__()  # call the parent class constructor
+        
+    
+class MetricAccumulatedError(Metric):
+    def __init__(self):
+        super().__init__()  # call the parent class constructor
+        
+    def compute(self, input_seqs, label_seqs, predicted_seqs):
+        # 0. check if the prediction is proper:
+        if not self.is_proper_prediction(input_seqs, label_seqs):
+            self.util_printer.print_red(f'{len(input_seqs)} labels are incorrect')
+            return
+        self.util_printer.print_green(f'{len(input_seqs)} labels are correct')
+
+        # 1. Calculate accumulated error for each prediction
+        goal_error_by_length = []
+        # count = 0
+
+        # Consider one group (input, label, predicted) at a time
+        for inp, pred, lab in zip(input_seqs, predicted_seqs, label_seqs):
+            # Only calculate the error for last point
+            last_err = self.compute_goal_error(pred, lab)
             accumulated_error = self.compute_accumulated_error(lab, pred)
 
             err_by_inlen = {
                 'input_len': len(inp),
                 'len_left': len(lab) - len(inp),
+                'goal_error': last_err,
                 'accumulated_error': accumulated_error
             }
-            accumulated_error_by_input_length.append(err_by_inlen) 
-        return accumulated_error_by_input_length
-    
+            goal_error_by_length.append(err_by_inlen) 
+        return err_by_inlen
+
+class MetricAccumulatedError(Metric):
+    def __init__(self):
+        super().__init__()  # call the parent class constructor
+        
     def process_and_plot(self, input_seqs, label_seqs, predicted_seqs, id_traj, thrown_object, filter_value, epoch_idx, filter_key='len_left'):
         # convert all elements of input_seqs to numpy
         input_seqs = [inp.cpu().numpy() for inp in input_seqs]
@@ -196,32 +218,6 @@ class MetricGoalError(Metric):
     def __init__(self):
         super().__init__()  # call the parent class constructor
         
-    def compute(self, input_seqs, label_seqs, predicted_seqs):
-        # 0. check if the prediction is proper:
-        if not self.is_proper_prediction(input_seqs, label_seqs):
-            self.util_printer.print_red(f'{len(input_seqs)} labels are incorrect')
-            return
-        self.util_printer.print_green(f'{len(input_seqs)} labels are correct')
-
-        # 1. Calculate accumulated error for each prediction
-        goal_error_by_length = []
-        # count = 0
-
-        # Consider one group (input, label, predicted) at a time
-        for inp, pred, lab in zip(input_seqs, predicted_seqs, label_seqs):
-            # Only calculate the error for last point
-            last_err = self.compute_goal_error(pred, lab)
-
-            err_by_inlen = {
-                'input_len': len(inp),
-                'len_left': len(lab) - len(inp),
-                'goal_error': last_err
-            }
-            # print('goal_error: ', err_by_inlen)
-            # input()
-            goal_error_by_length.append(err_by_inlen) 
-        return goal_error_by_length
-
     def process_and_plot(self, input_seqs, label_seqs, predicted_seqs, id_traj, thrown_object, filter_value, epoch_idx, filter_key='len_left'):
         # convert all elements of input_seqs to numpy
         input_seqs = [inp.cpu().numpy() for inp in input_seqs]
