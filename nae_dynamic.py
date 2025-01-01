@@ -18,7 +18,6 @@ from python_utils.plotter import Plotter
 
 from nae_core.utils.utils import NAE_Utils
 from nae_core.utils.submodules.training_utils.data_loader import DataLoader as NAEDataLoader
-from nae_core.utils.submodules.preprocess_utils.data_raw_correction_checker import RoCatRLDataRawCorrectionChecker
 from nae_core.utils.submodules.training_utils.input_label_generator import InputLabelGenerator
 
 import logging
@@ -792,7 +791,7 @@ class NAEDynamicLSTM():
                 (mean_capture_success_rate, var_capture_success_rate) \
                 = self.utils.score_all_predictions(output_teafo_pad_de, labels_teafo_pad, lengths_teafo, mask_teafo, 
                                                     output_aureg_pad_de, labels_aureg_pad, lengths_aureg, mask_aureg,
-                                                    capture_thres=0.1)
+                                                    capture_thres=0.1, debug=inference)
                 
                 print('-----------------final_err_var_penalty: ', final_err_var_penalty)
         
@@ -845,18 +844,18 @@ class NAEDynamicLSTM():
         epoch_idx = self.extract_epoch_idx(model_weights_dir)
         return epoch_idx
     
-    def data_correction_check(self, data_train, data_val, data_test):
-        data_collection_checker = RoCatRLDataRawCorrectionChecker()
-        print('Checking data correction ...')
-        for d_train, d_val, d_test in zip(data_train, data_val, data_test):
-            d_train_check = data_collection_checker.check_feature_correction(d_train, data_whose_y_up=True)
-            d_val_check = data_collection_checker.check_feature_correction(d_val, data_whose_y_up=True)
-            d_test_check = data_collection_checker.check_feature_correction(d_test, data_whose_y_up=True)
-            if not d_train_check or not d_val_check or not d_test_check:
-                self.util_printer.print_red('Data is incorrect, please check', background=True)
-                return False
-        self.util_printer.print_green('     Data is correct', background=True)
-        return True
+    # def data_correction_check(self, data_train, data_val, data_test):
+    #     data_collection_checker = RoCatRLDataRawCorrectionChecker()
+    #     print('Checking data correction ...')
+    #     for d_train, d_val, d_test in zip(data_train, data_val, data_test):
+    #         d_train_check = data_collection_checker.check_feature_correction(d_train, data_whose_y_up=True)
+    #         d_val_check = data_collection_checker.check_feature_correction(d_val, data_whose_y_up=True)
+    #         d_test_check = data_collection_checker.check_feature_correction(d_test, data_whose_y_up=True)
+    #         if not d_train_check or not d_val_check or not d_test_check:
+    #             self.util_printer.print_red('Data is incorrect, please check', background=True)
+    #             return False
+    #     self.util_printer.print_green('     Data is correct', background=True)
+    #     return True
     
     def merge_pad_trajectories(self, output_teafo_pad_de, lengths_teafo, output_aureg_pad_de, lengths_aureg):
         # unpad the output sequences
@@ -908,8 +907,8 @@ def main():
     # load data
     nae_data_loader = NAEDataLoader()
     data_train, data_val, data_test = nae_data_loader.load_dataset(data_dir)
-    if not nae.data_correction_check(data_train, data_val, data_test):
-        return
+    # if not nae.data_correction_check(data_train, data_val, data_test):
+    #     return
     
     # prepare data for training
     input_label_generator = InputLabelGenerator()
