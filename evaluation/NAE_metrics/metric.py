@@ -99,6 +99,21 @@ class Metric(ABC):
             result.sort(key=lambda x: x[key_filter])  # Sắp xếp tăng dần
 
         return result
+    
+    def compute_goal_error(self, pred, lab):
+        # Only calculate the error for last point
+        lab_last = lab[-1, :3]
+        pred_last = pred[-1, :3]
+        goal_err = np.linalg.norm(pred_last - lab_last)
+        return goal_err
+
+    def compute_accumulated_error(self, lab, pred):
+        # Only calculate the accumulated error for the first 3 dimensions x, y, z
+        lab = lab[:, :3]
+        pred = pred[:, :3]
+        dis_all = np.linalg.norm(pred - lab, axis=-1)
+        accumulated_error = np.mean(dis_all)
+        return accumulated_error
 
 class MetricAccumulatedError(Metric):
     def __init__(self):
@@ -122,14 +137,8 @@ class MetricAccumulatedError(Metric):
 
         # Consider one group (input, label, predicted) at a time
         for inp, pred, lab in zip(input_seqs, predicted_seqs, label_seqs):
-            # Only calculate the accumulated error for the first 3 dimensions x, y, z
-            inp = inp[:, :3]
-            lab = lab[:, :3]
-            pred = pred[:, :3]
-            # input('check pred, lab shape: ' + str(pred.shape) + ' ' + str(lab.shape))
+            accumulated_error = self.compute_accumulated_error(lab, pred)
 
-            dis = np.linalg.norm(pred - lab, axis=-1)
-            accumulated_error = np.mean(dis)
             err_by_inlen = {
                 'input_len': len(inp),
                 'len_left': len(lab) - len(inp),
@@ -201,9 +210,7 @@ class MetricGoalError(Metric):
         # Consider one group (input, label, predicted) at a time
         for inp, pred, lab in zip(input_seqs, predicted_seqs, label_seqs):
             # Only calculate the error for last point
-            lab_last = lab[-1, :3]
-            pred_last = pred[-1, :3]
-            last_err = np.linalg.norm(pred_last - lab_last)
+            last_err = self.compute_goal_error(pred, lab)
 
             err_by_inlen = {
                 'input_len': len(inp),
