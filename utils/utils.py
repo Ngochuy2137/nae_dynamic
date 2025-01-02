@@ -5,6 +5,9 @@ import matplotlib.pyplot as plt
 from .submodules.plotter import RoCatDataPlotter
 from torch.utils.data import DataLoader, TensorDataset
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
+from python_utils.printer import Printer
+
+global_util_printer = Printer()
 
 class NAE_Utils:
     def __init__(self):
@@ -111,7 +114,7 @@ class NAE_Utils:
 
     def score_all_predictions(self, output_teafo_pad_de, labels_teafo_pad, lengths_teafo, mask_teafo,
                                     output_aureg_pad_de, labels_aureg_pad, lengths_aureg, mask_aureg,
-                                    capture_thres=0.1):
+                                    capture_thres=[0.01, 0.05, 0.1], debug=False):
 
         # mask_reconstruction = torch.arange(max(lengths_reconstruction)).expand(len(lengths_reconstruction), max(lengths_reconstruction)) < lengths_reconstruction.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
         # mask_reconstruction = mask_reconstruction.to(loss_3.device)
@@ -122,6 +125,19 @@ class NAE_Utils:
         # mask_aureg = torch.arange(max(lengths_aureg)).expand(len(lengths_aureg), max(lengths_aureg)) < lengths_aureg.unsqueeze(1)
         # mask_aureg = mask_aureg.to(output_aureg_pad_de.device)
         mask_combined = torch.cat([mask_teafo, mask_aureg], dim=1)
+
+        if debug:
+            # check matrix mask_combined is correctly created
+            for i, m_cb, m_tf, m_ar in zip(range(len(mask_combined)), mask_combined, mask_teafo, mask_aureg):
+                # print(f'Row {i}: -> check {m_cb} = {m_tf} + {m_ar}')
+                if torch.sum(m_cb) != torch.sum(m_tf) + torch.sum(m_ar):
+                    print(f'Error in mask_combined at row {i}')
+                    print(f'mask_combined: {m_cb}')
+                    print(f'mask_teafo: {m_tf}')
+                    print(f'mask_aureg: {m_ar}')
+                    global_util_printer.print_red('Error in mask_combined')
+                    raise ValueError('Error in mask_combined')
+
 
         output_combined = torch.cat([output_teafo_pad_de, output_aureg_pad_de], dim=1)
         labels_combined = torch.cat([labels_teafo_pad, labels_aureg_pad], dim = 1)
@@ -140,6 +156,8 @@ class NAE_Utils:
         ade_entire = self.ade_masked_calculation(output_combined, labels_combined, mask_combined)
         #       This is for future prediction
         ade_future = self.ade_masked_calculation(output_aureg_pad_de, labels_aureg_pad, mask_aureg)
+        #       This is for past prediction
+        ade_past = self.ade_masked_calculation(output_teafo_pad_de, labels_teafo_pad, mask_teafo)
         
         ## =================== NADE Calculation ===================
         ## (Norm Average Displacement Error)
@@ -148,44 +166,57 @@ class NAE_Utils:
         nade_entire = self.nade_masked_calculation(ade_entire, labels_combined, mask_combined)
         #       This is for future prediction
         nade_future = self.nade_masked_calculation(ade_future, labels_aureg_pad, mask_aureg)
+        #       This is for past prediction
+        nade_past = self.nade_masked_calculation(ade_past, labels_teafo_pad, mask_teafo)
         
         ## =================== Final point Calculation ===================
         #       Calculate final step error
         #       Find the final valid step of each trajectory in batch based on mask
-        final_step_err, final_err_var_penalty = self.final_step_prediction_error(output_combined, labels_combined, mask_combined, mask_aureg)
+        final_step_err, converge_to_final_point_trending = self.final_step_prediction_error(output_combined, labels_combined, mask_combined, mask_aureg)
 
         ## =================== Synthesis all results ===================
         # Calculate mean values of all predictions
         # mean_mse_all = np.mean(mse_all)
         # mean_mse_xyz = np.mean(mse_xyz)
         mean_ade_entire = np.mean(ade_entire.cpu().numpy())
-        var_ade_entire = np.var(ade_entire.cpu().numpy())
+        std_ade_entire = np.std(ade_entire.cpu().numpy())
 
         mean_ade_future = np.mean(ade_future.cpu().numpy())
-        var_ade_future = np.var(ade_future.cpu().numpy())
+        std_ade_future = np.std(ade_future.cpu().numpy())
+
+        mean_ade_past = np.mean(ade_past.cpu().numpy())
+        std_ade_past = np.std(ade_past.cpu().numpy())
 
         mean_nade_entire = np.mean(nade_entire.cpu().numpy())
-        var_nade_entire = np.var(nade_entire.cpu().numpy())
+        std_nade_entire = np.std(nade_entire.cpu().numpy())
 
         mean_nade_future = np.mean(nade_future.cpu().numpy())
-        var_nade_future = np.var(nade_future.cpu().numpy())
+        std_nade_future = np.std(nade_future.cpu().numpy())
 
-        mean_final_step_err = np.mean(final_step_err.cpu().numpy())
-        var_fe = np.var(final_step_err.cpu().numpy())
+        mean_nade_past = np.mean(nade_past.cpu().numpy())
+        std_nade_past = np.std(nade_past.cpu().numpy())
+
+        mean_fe = np.mean(final_step_err.cpu().numpy()) # final step error
+        std_fe = np.std(final_step_err.cpu().numpy())
 
 
         # Calculate capture success rate
-        success_rate_matrix = (final_step_err <= capture_thres).cpu().numpy()
-        mean_capture_success_rate = np.mean(success_rate_matrix)
-        var_capture_success_rate = np.var(success_rate_matrix)
-
+        capture_success_rates = []
+        for cap_thr in capture_thres:
+            success_rate_matrix = (final_step_err <= cap_thr).cpu().numpy()
+            mean_csr = np.mean(success_rate_matrix)
+            # cal standard deviation
+            std_csr = np.std(success_rate_matrix)
+            capture_success_rates.append((cap_thr, mean_csr, std_csr))
         
-        return  (mean_ade_entire, var_ade_entire), \
-                (mean_ade_future, var_ade_future), \
-                (mean_nade_entire, var_nade_entire), \
-                (mean_nade_future, var_nade_future), \
-                (mean_final_step_err, var_fe, final_err_var_penalty), \
-                (mean_capture_success_rate, var_capture_success_rate)
+        return  (mean_ade_entire,   std_ade_entire), \
+                (mean_ade_future,   std_ade_future), \
+                (mean_ade_past,     std_ade_past), \
+                (mean_nade_entire,  std_nade_entire), \
+                (mean_nade_future,  std_nade_future), \
+                (mean_nade_past,    std_nade_past), \
+                (mean_fe, std_fe, converge_to_final_point_trending), \
+                capture_success_rates
     
     
     def ade_masked_calculation(self, predictions, labels, mask_matrix):
@@ -193,8 +224,18 @@ class NAE_Utils:
         ade = torch.sum(displacement_err_list, dim=1)
         # calculate total valide data point of each row in mask_matrix
         total_length = torch.sum(mask_matrix, dim=1)
-        ade = ade/total_length
-        ade = ade
+        # print('check mask_matrix shape: ', mask_matrix.shape)
+        # # check if all elements of total_length are the same
+        # print('check total_length same: ', torch.all(total_length == total_length[0]))
+        # input()
+        # print('total_length: ', total_length)
+        # input()
+        # # filter unique elements in total_length
+        # total_length_unique = torch.unique(total_length)
+        # print('total_length_unique: ', total_length_unique)
+        # input()
+        
+        ade = ade/total_length  # mean
         return ade
 
     def nade_masked_calculation(self, ade, labels, mask_matrix):
@@ -238,9 +279,9 @@ class NAE_Utils:
         length_left = torch.sum(mask_aureg, dim=1)
 
         # calculate penalty for variance of length_left
-        final_err_var_penalty = self.calculate_penalty_metric(l2_error, length_left)
+        converge_to_final_point_trending = self.calculate_penalty_metric(l2_error, length_left)
 
-        return l2_error, final_err_var_penalty
+        return l2_error, converge_to_final_point_trending
 
     def calculate_penalty_metric(self, errors, steps):
         """

@@ -248,7 +248,7 @@ class NAEDynamicLSTM():
         self.loss2_weight = loss2_weight
         self.loss2_1_weight = loss2_1_weight
 
-        self.run_name = f"{train_id}-model_{datetime.now().strftime('%d-%m-%Y_%H-%M-%S')}_hiddensize{hidden_size}"
+        self.run_name = f"{train_id}-{thrown_object}-model_{datetime.now().strftime('%d-%m-%Y_%H-%M-%S')}_hiddensize{hidden_size}"
 
         # get dir of folder including this script
         cur_dir = os.path.dirname(os.path.realpath(__file__))
@@ -520,10 +520,14 @@ class NAEDynamicLSTM():
                 try:
                     # logging.info(f"VALIDATION:")
                     mean_loss_total_val_log, \
-                    mean_ade_entire, mean_ade_future, mean_ade_past, \
-                    mean_nade_entire, mean_nade_future, mean_nade_past, \
-                    mean_final_step_err, var_fe, final_err_var_penalty, \
-                    capture_success_rate = self.validate_and_score(data=data_val, batch_size=self.batch_size_val, shuffle=False, epoch=epoch)
+                    (mean_ade_entire,   std_ade_entire), \
+                    (mean_ade_future,   std_ade_future), \
+                    (mean_ade_past,     std_ade_past), \
+                    (mean_nade_entire,  std_nade_entire), \
+                    (mean_nade_future,  std_nade_future), \
+                    (mean_nade_past,    std_nade_past), \
+                    (mean_fe, std_fe, converge_to_final_point_trending), \
+                    capture_success_rates = self.validate_and_score(data=data_val, shuffle=False)
                 except RuntimeError as e:
                     # logging.error("Epoch {epoch} - VAL      RuntimeError during validation!") if debug else None
                     # logging.error("Epoch {epoch} - VAL      Error message: %s", str(e)) if debug else None
@@ -538,29 +542,68 @@ class NAEDynamicLSTM():
         
                 # 3. ----- FOR WANDB LOG -----
                 if enable_wandb:
-                    total_traing_time = time.time() - start_t
+                    total_training_time = time.time() - start_t
                     wandb.log({
-                        "training_loss1": loss_1_train_log,
-                        "training_loss2": loss_2_train_log,
-                        "training_loss3": loss_3_train_log,
-                        "training_loss_total": loss_total_train_log,
-                        "valid_loss_total": mean_loss_total_val_log,
-                        "valid_mean_ade_entire": mean_ade_entire,
-                        "valid_mean_ade_future": mean_ade_future,
-                        "valid_mean_ade_past": mean_ade_past,
-                        "valid_mean_nade_entire": mean_nade_entire,
-                        "valid_mean_nade_future": mean_nade_future,
-                        "valid_mean_nade_past": mean_nade_past,
-                        "valid_mean_final_step_err": mean_final_step_err,
-                        "valid_var_fe": var_fe,
-                        "valid_capture_success_rate": capture_success_rate,
-                        "final_err_var_penalty": final_err_var_penalty,
-                        "training_time_mins": total_traing_time/60,
-                        "learning_rate": self.optimizer.param_groups[0]['lr'],
-                        "training speed (s/epoch)": time_total_epoch,
-                        },
-                        step=epoch
-                    )
+                        'valid_loss_total': mean_loss_total_val_log,
+                    }, step=epoch)
+
+                    wandb.log({
+                        'valid_mean_ade_entire': mean_ade_entire,
+                        'valid_mean_ade_entire_min': mean_ade_entire - std_ade_entire,
+                        'valid_mean_ade_entire_max': mean_ade_entire + std_ade_entire,
+                    }, step=epoch)
+
+                    wandb.log({
+                        'valid_mean_ade_future': mean_ade_future,
+                        'valid_mean_ade_future_min': mean_ade_future - std_ade_future,
+                        'valid_mean_ade_future_max': mean_ade_future + std_ade_future,
+                    }, step=epoch)
+
+                    wandb.log({
+                        'valid_mean_ade_past': mean_ade_past,
+                        'valid_mean_ade_past_min': mean_ade_past - std_ade_past,
+                        'valid_mean_ade_past_max': mean_ade_past + std_ade_past,
+                    }, step=epoch)
+
+                    wandb.log({
+                        'valid_mean_nade_entire': mean_nade_entire,
+                        'valid_mean_nade_entire_min': mean_nade_entire - std_nade_entire,
+                        'valid_mean_nade_entire_max': mean_nade_entire + std_nade_entire,
+                    }, step=epoch)
+
+                    wandb.log({
+                        'valid_mean_nade_future': mean_nade_future,
+                        'valid_mean_nade_future_min': mean_nade_future - std_nade_future,
+                        'valid_mean_nade_future_max': mean_nade_future + std_nade_future,
+                    }, step=epoch)
+
+                    wandb.log({
+                        'valid_mean_nade_past': mean_nade_past,
+                        'valid_mean_nade_past_min': mean_nade_past - std_nade_past,
+                        'valid_mean_nade_past_max': mean_nade_past + std_nade_past,
+                    }, step=epoch)
+
+                    wandb.log({
+                        "valid_mean_IE_err": mean_fe,
+                        "valide_mean_IE_min": mean_fe - std_fe,
+                        "valid_mean_IE_max": mean_fe + std_fe,
+                    }, step=epoch)
+
+                    for cap_rate_data in capture_success_rates:
+                        cap_thr = cap_rate_data[0]
+                        cap_rate = cap_rate_data[1]
+                        cap_std = cap_rate_data[2]
+                        wandb.log({
+                            f"valid_capture_success_rate_{cap_thr}": cap_rate,
+                            f"valid_capture_success_rate_{cap_thr}_min": cap_rate - cap_std,
+                            f"valid_capture_success_rate_{cap_thr}_max": cap_rate + cap_std,
+                        }, step=epoch)
+
+                    wandb.log({
+                        'converge_to_final_point_trending': converge_to_final_point_trending,
+                        'training speed (s/epoch)': time_total_epoch,
+                        'training_time_mins': total_training_time/60,
+                    }, step=epoch)
 
                 if (epoch) % 1 == 0:
                     self.util_printer.print_green(f'Epoch [{epoch}/{self.num_epochs}]', background=False)
@@ -605,7 +648,7 @@ class NAEDynamicLSTM():
         wandb.init(
             # set the wandb project where this run will be logged
             project = project_name,
-            name=self.thrown_object + '_' + self.run_name,
+            name=self.run_name,
             # id='o5qeq1n8', resume='allow',
             id=run_id, resume=resume,
             # track hyperparameters and run metadata
@@ -688,7 +731,7 @@ class NAEDynamicLSTM():
         print(f'Models were saved to {model_dir}')
         return model_dir
 
-    def validate_and_score(self, data, batch_size, shuffle=False, inference=False, epoch=''):
+    def validate_and_score(self, data, shuffle=False, inference=False):
         self.util_printer.print_green(f'Validating: {len(data)} samples')
         dataloader = TorchDataLoader(data, batch_size=len(data), collate_fn=lambda x: self.collate_pad_fn(x), shuffle=shuffle)
         self.vls_lstm.eval()
@@ -704,7 +747,7 @@ class NAEDynamicLSTM():
         # mean_nade_future = None
         # mean_final_step_err = None
         # mean_capture_success_rate = None
-        # final_err_var_penalty = None
+        # converge_to_final_point_trending = None
 
         if inference:
             predicted_seqs_all = []
@@ -787,30 +830,34 @@ class NAEDynamicLSTM():
 
 
                 ## ----- SCORE -----
-                (mean_ade_entire, var_ade_entire), \
-                (mean_ade_future, var_ade_future), \
-                (mean_ade_past, var_ade_past), \
-                (mean_nade_entire, var_nade_entire), \
-                (mean_nade_future, var_nade_future), \
-                (mean_nade_past, var_nade_past), \
-                (mean_final_step_err, var_fe, final_err_var_penalty), \
-                (mean_capture_success_rate, var_capture_success_rate) \
+                (mean_ade_entire,   std_ade_entire), \
+                (mean_ade_future,   std_ade_future), \
+                (mean_ade_past,     std_ade_past), \
+                (mean_nade_entire,  std_nade_entire), \
+                (mean_nade_future,  std_nade_future), \
+                (mean_nade_past,    std_nade_past), \
+                (mean_fe, std_fe, converge_to_final_point_trending), \
+                capture_success_rates \
                 = self.utils.score_all_predictions(output_teafo_pad_de, labels_teafo_pad, lengths_teafo, mask_teafo, 
                                                     output_aureg_pad_de, labels_aureg_pad, lengths_aureg, mask_aureg,
-                                                    capture_thres=0.05, debug=inference)
+                                                    capture_thres=[0.01, 0.05, 0.1], debug=inference)
                 
-                print('-----------------final_err_var_penalty: ', final_err_var_penalty)
+                # print('-----------------converge_to_final_point_trending: ', converge_to_final_point_trending)
         
         if inference:
-            return predicted_seqs_all, label_seqs_all, final_err_var_penalty
+            return predicted_seqs_all, label_seqs_all, converge_to_final_point_trending
         # get mean value of scored data
         mean_loss_total_log = loss_total_log/len(dataloader.dataset)
         
         return  mean_loss_total_log, \
-                mean_ade_entire, mean_ade_future, mean_ade_past, \
-                mean_nade_entire, mean_nade_future, mean_nade_past, \
-                mean_final_step_err, var_fe, final_err_var_penalty, \
-                mean_capture_success_rate
+                (mean_ade_entire,   std_ade_entire), \
+                (mean_ade_future,   std_ade_future), \
+                (mean_ade_past,     std_ade_past), \
+                (mean_nade_entire,  std_nade_entire), \
+                (mean_nade_future,  std_nade_future), \
+                (mean_nade_past,    std_nade_past), \
+                (mean_fe, std_fe, converge_to_final_point_trending), \
+                capture_success_rates
 
     def concat_output_seq(self, out_seq_teafo, out_seq_aureg):
         # Nối 2 chuỗi đầu ra (dọc theo chiều thời gian - dim=1)
