@@ -520,9 +520,10 @@ class NAEDynamicLSTM():
                 try:
                     # logging.info(f"VALIDATION:")
                     mean_loss_total_val_log, \
-                    mean_ade_entire, mean_ade_future, \
-                    mean_nade_entire, mean_nade_future, \
-                    mean_final_step_err, var_fe, final_err_var_penalty, capture_success_rate = self.validate_and_score(data=data_val, batch_size=self.batch_size_val, shuffle=False, epoch=epoch)
+                    mean_ade_entire, mean_ade_future, mean_ade_past, \
+                    mean_nade_entire, mean_nade_future, mean_nade_past, \
+                    mean_final_step_err, var_fe, final_err_var_penalty, \
+                    capture_success_rate = self.validate_and_score(data=data_val, batch_size=self.batch_size_val, shuffle=False, epoch=epoch)
                 except RuntimeError as e:
                     # logging.error("Epoch {epoch} - VAL      RuntimeError during validation!") if debug else None
                     # logging.error("Epoch {epoch} - VAL      Error message: %s", str(e)) if debug else None
@@ -546,8 +547,10 @@ class NAEDynamicLSTM():
                         "valid_loss_total": mean_loss_total_val_log,
                         "valid_mean_ade_entire": mean_ade_entire,
                         "valid_mean_ade_future": mean_ade_future,
+                        "valid_mean_ade_past": mean_ade_past,
                         "valid_mean_nade_entire": mean_nade_entire,
                         "valid_mean_nade_future": mean_nade_future,
+                        "valid_mean_nade_past": mean_nade_past,
                         "valid_mean_final_step_err": mean_final_step_err,
                         "valid_var_fe": var_fe,
                         "valid_capture_success_rate": capture_success_rate,
@@ -786,13 +789,15 @@ class NAEDynamicLSTM():
                 ## ----- SCORE -----
                 (mean_ade_entire, var_ade_entire), \
                 (mean_ade_future, var_ade_future), \
+                (mean_ade_past, var_ade_past), \
                 (mean_nade_entire, var_nade_entire), \
                 (mean_nade_future, var_nade_future), \
+                (mean_nade_past, var_nade_past), \
                 (mean_final_step_err, var_fe, final_err_var_penalty), \
                 (mean_capture_success_rate, var_capture_success_rate) \
                 = self.utils.score_all_predictions(output_teafo_pad_de, labels_teafo_pad, lengths_teafo, mask_teafo, 
                                                     output_aureg_pad_de, labels_aureg_pad, lengths_aureg, mask_aureg,
-                                                    capture_thres=0.1, debug=inference)
+                                                    capture_thres=0.05, debug=inference)
                 
                 print('-----------------final_err_var_penalty: ', final_err_var_penalty)
         
@@ -801,7 +806,11 @@ class NAEDynamicLSTM():
         # get mean value of scored data
         mean_loss_total_log = loss_total_log/len(dataloader.dataset)
         
-        return mean_loss_total_log, mean_ade_entire, mean_ade_future, mean_nade_entire, mean_nade_future, mean_final_step_err, var_fe, final_err_var_penalty, mean_capture_success_rate
+        return  mean_loss_total_log, \
+                mean_ade_entire, mean_ade_future, mean_ade_past, \
+                mean_nade_entire, mean_nade_future, mean_nade_past, \
+                mean_final_step_err, var_fe, final_err_var_penalty, \
+                mean_capture_success_rate
 
     def concat_output_seq(self, out_seq_teafo, out_seq_aureg):
         # Nối 2 chuỗi đầu ra (dọc theo chiều thời gian - dim=1)
