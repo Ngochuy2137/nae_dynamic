@@ -26,10 +26,28 @@ def main():
     # ## ----------------- 3. Bottle -----------------\
     data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/data_preprocessed/Bottle'
     thrown_object = 'bottle'
-    parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-lr5e-5_model/bottle-lr5e-5-model_01-01-2025_22-28-52_hiddensize128'
-    epoch_idx = 6900
-    saved_model_dir = glob.glob(f'{parent_dir}/*epochs{epoch_idx}*')[0]
+    # # ----- lr = 5e-5
+    # parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-lr5e-5_model/bottle-lr5e-5-model_01-01-2025_22-28-52_hiddensize128'
+    # epoch_idx = 5530 #6900
+    # note = 'lr: 5e-5'
+
+    ## ----- lr = 1e-4
+    # parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-lr1e-4_model/bottle-lr1e-4-model_01-01-2025_23-58-41_hiddensize128'
+    # epoch_idx = 5360    #   3600 4680 5360
+    # note = 'lr: 1e-4'
+
+    # ## ----- 2.0 * Loss1
+    # parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-2loss1_model/bottle-2loss1-model_02-01-2025_02-26-46_hiddensize128'
+    # epoch_idx = 1180
+    # note = '2.0 * Loss1'
+
+    ## ----- 3.0 * Loss1
+    parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-3loss1_model/bottle-3loss1-model_02-01-2025_12-04-38_hiddensize128'
+    epoch_idx = 4600
+    note = '3.0 * Loss1'
     
+    
+    saved_model_dir = glob.glob(f'{parent_dir}/*epochs{epoch_idx}*')[0]
     # Training parameters 
     training_params = {
         'num_epochs': 5000,
@@ -73,7 +91,7 @@ def main():
     input_seqs = [inp[0] for inp in data_test]
     metric.process_and_plot(input_seqs=input_seqs, predicted_seqs=predicted_seqs, label_seqs=label_seqs, 
                             thrown_object=thrown_object, id_traj=id_traj, 
-                            filter_key=filter_key, filter_value=filter_value, epoch_idx=epoch_idx)
+                            filter_key=filter_key, filter_value=filter_value, epoch_idx=epoch_idx, note=note)
     
 
 if __name__ == '__main__':

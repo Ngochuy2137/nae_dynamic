@@ -24,21 +24,25 @@ def main():
 
 
     # ## ----------------- 1. Bamboo -----------------
-    # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/data_preprocessed/Bamboo'
-    # thrown_object = 'bamboo'
-    # parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bamboo_model/bamboo-model_01-01-2025_06-58-11_hiddensize128'
-    # epoch_idx = 1220 # 1210 1220
-    # saved_model_dir = glob.glob(f'{parent_dir}/*epochs{epoch_idx}*')[0]
-
-
-    # ## ----------------- 3. Bottle -----------------\
     data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/data_preprocessed/Bottle'
     thrown_object = 'bottle'
-    parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-lr5e-5_model/bottle-lr5e-5-model_01-01-2025_22-28-52_hiddensize128'
-    epoch_idx = 6500
+    # # ----- lr = 5e-5
+    # parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-lr5e-5_model/bottle-lr5e-5-model_01-01-2025_22-28-52_hiddensize128'
+    # epoch_idx = 5530 #6900
+    # note = 'lr: 5e-5'
+
+    ## ----- lr = 1e-4
+    # parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-lr1e-4_model/bottle-lr1e-4-model_01-01-2025_23-58-41_hiddensize128'
+    # epoch_idx = 5360    #   3600 4680 5360
+    # note = 'lr: 1e-4'
+
+    ## ----- 2.0 * Loss1
+    parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-2loss1_model/bottle-2loss1-model_02-01-2025_02-26-46_hiddensize128'
+    epoch_idx = 1180
+    note = '2.0 * Loss1'
+
+
     saved_model_dir = glob.glob(f'{parent_dir}/*epochs{epoch_idx}*')[0]
-
-
     # Training parameters 
     training_params = {
         'num_epochs': 5000,

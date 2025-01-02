@@ -1,5 +1,7 @@
 from nae_core.evaluation.NAE_metrics.metric import *
 import glob
+from python_utils.printer import Printer
+global_util_printer = Printer()
 
 '''
 We will examine how the accumulated error changes with increasing input length
@@ -27,11 +29,28 @@ def main():
     # ## ----------------- 3. Bottle -----------------\
     data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/data_preprocessed/Bottle'
     thrown_object = 'bottle'
-    parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-lr5e-5_model/bottle-lr5e-5-model_01-01-2025_22-28-52_hiddensize128'
-    epoch_idx = 6900
+    # # ----- lr = 5e-5
+    # parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-lr5e-5_model/bottle-lr5e-5-model_01-01-2025_22-28-52_hiddensize128'
+    # epoch_idx = 5530 #6900
+    # note = 'lr: 5e-5'
+
+    ## ----- lr = 1e-4
+    # parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-lr1e-4_model/bottle-lr1e-4-model_01-01-2025_23-58-41_hiddensize128'
+    # epoch_idx = 5360    #   3600 4680 5360
+    # note = 'lr: 1e-4'
+
+    # ## ----- 2.0 * Loss1
+    # parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-2loss1_model/bottle-2loss1-model_02-01-2025_02-26-46_hiddensize128'
+    # epoch_idx = 1180
+    # note = '2.0 * Loss1'
+
+    ## ----- 3.0 * Loss1
+    parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-3loss1_model/bottle-3loss1-model_02-01-2025_12-04-38_hiddensize128'
+    epoch_idx = 4600
+    note = '3.0 * Loss1'
+
+
     saved_model_dir = glob.glob(f'{parent_dir}/*epochs{epoch_idx}*')[0]
-
-
     # Training parameters 
     training_params = {
         'num_epochs': 5000,
@@ -62,6 +81,7 @@ def main():
 
     xy_pairs = []
     for id_traj, traj in enumerate(data_test_raw):
+        traj_len = len(traj['preprocess']['model_data'])
         # if id_traj != 5:
         #     continue
         '''
@@ -75,7 +95,8 @@ def main():
         # Inference
         predicted_seqs, label_seqs, final_err_var_penalty = nae.validate_and_score(data=data_test, batch_size=1024, shuffle=False, inference=True)
 
-        print('\n---------------------------------------------------')
+        print('\n')
+        global_util_printer.print_blue('---------------------------------------------------', background=True)
         print('Considering trajectory: ', id_traj)
         print(f'    There {len(predicted_seqs)} groups of input-label-prediction sequences')
 
@@ -86,14 +107,16 @@ def main():
         
 
         # 1. Calculate accumulated error for one trajectory
-        accumulated_err = metric.compute(input_data, label_seqs, predicted_seqs)
-        if accumulated_err == None:
+        eval_result = metric.compute(input_data, label_seqs, predicted_seqs)
+
+        # print('eval_result len: ', len(eval_result)); input()
+        if eval_result == None:
             metric.util_printer.print_red(f'Error in metric calculation', background=True)
             return
         
         # 2.1 Show line chart of change in accumulated error with increasing input length
-        input_lengths = [acer['input_len'] for acer in accumulated_err]
-        mean_acc_errs = [acer['accumulated_error'] for acer in accumulated_err]
+        input_lengths = [acer['input_len'] for acer in eval_result]
+        mean_acc_errs = [acer['accumulated_error'] for acer in eval_result]
 
         xy_pairs.append((input_lengths, mean_acc_errs))
             # metric.util_plotter.plot_line_chart(x_values = input_lengths, y_values = [mean_acc_errs], 
@@ -112,7 +135,7 @@ def main():
         # 2. Plot
         if plot=='y':
             metric.util_plotter.plot_predictions_plotly(inputs=input_data, labels=label_seqs, predictions=predicted_seqs, 
-                                                        title=f'{thrown_object} - Predictions - Trajectory #{id_traj} - EPOCH {epoch_idx}', rotate_data_whose_y_up=True, 
+                                                        title=f'{thrown_object} - Predictions - Trajectory #{id_traj} with len {traj_len} - EPOCH {epoch_idx}', rotate_data_whose_y_up=True, 
                                                         save_plot=False, font_size_note=12,
                                                         show_all_as_default=False)
     
