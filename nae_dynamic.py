@@ -12,6 +12,7 @@ from datetime import datetime
 import os
 import time
 import re
+import json
 
 from python_utils.printer import Printer
 from python_utils.plotter import Plotter
@@ -224,29 +225,59 @@ class VLSLSTM(nn.Module):
 #------------------------- TRAINING -------------------------
 class NAEDynamicLSTM():
     def __init__(self, input_size, hidden_size, output_size, num_layers_lstm, lr, 
-                 num_epochs, batch_size_train, batch_size_val, save_interval, thrown_object, train_id, dropout_rate, warmup_steps=0, loss1_weight=1.0, loss2_weight=1.0, loss2_1_weight=0.0, weight_decay=1e-4,
+                 num_epochs, batch_size_train, save_interval, thrown_object, train_id, dropout_rate, warmup_steps=0, loss1_weight=1.0, loss2_weight=1.0, loss2_1_weight=0.0, weight_decay=1e-4,
+                 data_step_start=1, data_step_end=-1, data_increment=1,
                  device=torch.device('cuda'),
                  data_dir=''):
         self.utils = NAE_Utils()
         self.device = device
-
         # model architecture params
+        self.input_size = input_size
         self.hidden_size = hidden_size
+        self.output_size = output_size
         self.num_layers = num_layers_lstm
         self.lr = lr
-        self.dropout_rate = dropout_rate
 
         # training params
         self.num_epochs = num_epochs
         self.batch_size_train = batch_size_train
-        self.batch_size_val = batch_size_val
         self.save_interval = save_interval
         self.thrown_object = thrown_object + '_model'
-        self.data_dir = data_dir
+        self.train_id = train_id
+        self.dropout_rate = dropout_rate
         self.warmup_steps = warmup_steps
         self.loss1_weight = loss1_weight
         self.loss2_weight = loss2_weight
         self.loss2_1_weight = loss2_1_weight
+        self.weight_decay = weight_decay
+
+
+        # create config dict
+        self.model_config = {
+            'input_size': input_size,
+            'hidden_size': hidden_size,
+            'output_size': output_size,
+            'num_layers_lstm': num_layers_lstm,
+            'lr': lr,
+            'num_epochs': num_epochs,
+            'batch_size_train': batch_size_train,
+            'save_interval': save_interval,
+            'thrown_object': thrown_object,
+            'train_id': train_id,
+            'dropout_rate': dropout_rate,
+            'warmup_steps': warmup_steps,
+            'loss1_weight': loss1_weight,
+            'loss2_weight': loss2_weight,
+            'loss2_1_weight': loss2_1_weight,
+            'weight_decay': weight_decay,
+            'data_dir': data_dir,
+            'data_step_start': data_step_start,
+            'data_step_end': data_step_end,
+            'data_increment': data_increment
+        }
+
+
+        self.data_dir = data_dir
 
         self.run_name = f"{train_id}-{thrown_object}-model_{datetime.now().strftime('%d-%m-%Y_%H-%M-%S')}_hiddensize{hidden_size}"
 
@@ -373,6 +404,8 @@ class NAEDynamicLSTM():
                                                 pin_memory=True,
                                                 persistent_workers=True)
 
+            count_tiny_grad = 0
+            count_huge_grad = 0
             for epoch in range(start_epoch, self.num_epochs):
                 time_start_epoch = time.time()
                 self.encoder.train()
@@ -411,6 +444,15 @@ class NAEDynamicLSTM():
                         mask_aureg = mask_aureg.to(self.device, non_blocking=True)
                         mask_reconstruction = mask_reconstruction.to(self.device, non_blocking=True)
 
+
+                        # # check shape masks
+                        # print('OUT:')
+                        # print('     mask_in shape: ', mask_in.shape)
+                        # print('     mask_teafo shape: ', mask_teafo.shape)
+                        # print('     mask_aureg shape: ', mask_aureg.shape)
+                        # print('     mask_reconstruction shape: ', mask_reconstruction.shape)
+                        # input()
+                        # mask_combined = torch.cat([mask_teafo, mask_aureg], dim=1)
 
                         # time_flag_1 = time.time() # load data time
                         with autocast():
@@ -492,10 +534,12 @@ class NAEDynamicLSTM():
                         total_gradient_norm = torch.tensor(total_gradient_norm)
                         if total_gradient_norm < 1e-5 or torch.isnan(total_gradient_norm):
                             self.util_printer.print_purple(f"Epoch {epoch} - Batch {batch_idx}/{len(dataloader_train)} - Total Gradient Norm: {total_gradient_norm}")
+                            count_tiny_grad += 1
                             # input('DEBUG')
                         # check infinities
                         elif total_gradient_norm > 100 or torch.isinf(total_gradient_norm):
                             self.util_printer.print_red(f"Epoch {epoch} - Batch {batch_idx}/{len(dataloader_train)} - Total Gradient Norm: {total_gradient_norm}")
+                            count_huge_grad += 1
                             # input('DEBUG')
                         else:
                             # self.util_printer.print_green(f"Epoch {epoch} - Batch {batch_idx}/{len(dataloader_train)} - Total Gradient Norm: {total_gradient_norm}")
@@ -641,6 +685,7 @@ class NAEDynamicLSTM():
                         'converge_to_final_point_trending': converge_to_final_point_trending,
                         'training speed (s/epoch)': time_total_epoch,
                         'training_time_mins': total_training_time/60,
+                        'learning_rate': self.optimizer.param_groups[0]["lr"],
                     }, step=epoch)
 
                 if (epoch) % 1 == 0:
@@ -652,6 +697,8 @@ class NAEDynamicLSTM():
                     print(f'    Validation time %:  {time_valid_epoch/time_total_epoch:.2f}')
                     print(f'    Loss:               {loss_total_train_log:.6f}')
                     print(f'    learning rate:      {self.optimizer.param_groups[0]["lr"]}')
+                    printer_global.print_yellow(f'   count_tiny_grad:         {count_tiny_grad}')
+                    printer_global.print_yellow(f'   count_huge_grad:         {count_huge_grad}')
                     printer_global.print_green(f'    mean_fe +-:         {mean_fe:.6f} +- {std_fe:.6f}')
                     print('\n-----------------------------------')
                 if epoch < self.warmup_steps:
@@ -766,7 +813,8 @@ class NAEDynamicLSTM():
             'loss': loss_all_data,
         }, checkpoint_path)
         
-        self.utils.save_model_info(self.data_dir, model_dir, data_num, self.num_epochs, self.batch_size_train, start_t, training_t, loss_all_data, self.wandb_run_url)
+        # self.utils.save_model_info(self.data_dir, model_dir, data_num, self.num_epochs, self.batch_size_train, start_t, training_t, loss_all_data, self.wandb_run_url)
+        self.save_model_config(model_dir)
         print(f'Models were saved to {model_dir}')
         return model_dir
 
@@ -866,7 +914,6 @@ class NAEDynamicLSTM():
                     # logging.error(f"Epoch {epoch} -      Loss contains NaN!") if debug else None
                     raise ValueError("     NaN detected in loss!")
                 loss_total_log += loss_mean.item()
-
 
                 ## ----- SCORE -----
                 (mean_ade_entire,   std_ade_entire), \
@@ -970,21 +1017,20 @@ class NAEDynamicLSTM():
                     total_norm += param_norm.item() ** 2
         return total_norm ** 0.5  # Final L2 norm
 
+    def save_model_config(self, model_dir):
+        with open(os.path.join(model_dir, 'model_config.json'), 'w') as f:
+            json.dump(self.model_config, f, indent=4)
+        self.util_printer.print_green(f'Model config was saved to {model_dir}', background=True)
+
 def main():
     device = torch.device('cuda')
     seed = 42
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
-    # feature_size = 9
-    # # 1. Dataset and DataLoader
-    # dataset = TimeSeriesDataset(num_samples=100, max_len=15, feature_size=feature_size)
 
-    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_prediction_ws/src/nae/data/nae_paper_dataset/new_data_format/bamboo/split/bamboo'
-    thrown_object = 'bamboo'
-    
-    # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_prediction_ws/src/nae/data/rllab_dataset_no_orientation/data_enrichment/big_plane/big_plane_enrich_for_training'
-    # thrown_object = 'big_plane'
+    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/data_preprocessed/Bottle'
+    thrown_object = 'bottle-1loss1-inlen-2-wc1e-4'
     
     checkout_path = None
     wdb_run_id=None   # 't5nlloi0'
@@ -993,11 +1039,17 @@ def main():
 
     # Training parameters 
     training_params = {
-        'num_epochs': 5000,
-        'batch_size_train': 128,    
-        'batch_size_val': 1024,
+        'num_epochs': 12000,
+        'batch_size_train': 512,    
         'save_interval': 10,
-        'thrown_object' : thrown_object + '-dynamic-len'
+        'thrown_object' : thrown_object,
+        'train_id': 'ACC-repair',
+        'warmup_steps': 25,
+        'dropout_rate': 0.0,
+        'loss1_weight': 1.0,
+        'loss2_weight': 1.0,
+        'loss2_1_weight': 0.0,
+        'weight_decay': 0.0001,
     }
     # Model parameters
     model_params = {
@@ -1007,19 +1059,29 @@ def main():
         'num_layers_lstm': 2,
         'lr': 0.0001
     }
+    data_params = {
+        'step_start': 2,
+        'step_end': -2,
+        'increment': 1,
+    }
 
-    nae = NAEDynamicLSTM(**model_params, **training_params, data_dir=data_dir, device=device)
+    wdb_notes = f'lr: {model_params["lr"]}, \
+                {training_params["loss2_weight"]}*L2: ,  \
+                {training_params["loss2_1_weight"]}*L2_1, \
+                warmup {training_params["warmup_steps"]}, \
+                dropout: {training_params["dropout_rate"]}, \
+                weight_decay: {training_params["weight_decay"]}'
+
+    nae = NAEDynamicLSTM(**model_params, **training_params, **data_params, data_dir=data_dir, device=device)
     # load data
     nae_data_loader = NAEDataLoader()
-    data_train, data_val, data_test = nae_data_loader.load_dataset(data_dir)
-    # if not nae.data_correction_check(data_train, data_val, data_test):
-    #     return
-    
+    data_train, data_val, data_test = nae_data_loader.load_train_val_test_dataset(data_dir)
+
     # prepare data for training
     input_label_generator = InputLabelGenerator()
-    data_train = input_label_generator.generate_input_label_dynamic_seqs(data_train, step_start=5, step_end=-3, increment=1, shuffle=True)
-    data_val = input_label_generator.generate_input_label_dynamic_seqs(data_val, step_start=5, step_end=-3, increment=1, shuffle=True)
-    data_test = input_label_generator.generate_input_label_dynamic_seqs(data_test, step_start=5, step_end=-3, increment=1, shuffle=True)
+    data_train = input_label_generator.generate_input_label_dynamic_seqs(data_train, step_start=data_params['step_start'], step_end=data_params['step_end'], increment=data_params['increment'], shuffle=True)
+    data_val = input_label_generator.generate_input_label_dynamic_seqs(data_val, step_start=data_params['step_start'], step_end=data_params['step_end'], increment=data_params['increment'], shuffle=True)
+    data_test = input_label_generator.generate_input_label_dynamic_seqs(data_test, step_start=data_params['step_start'], step_end=data_params['step_end'], increment=data_params['increment'], shuffle=True)
 
     print('     ----- After generating inputs, labels -----')
     print('     Training data:      ', len(data_train))
@@ -1034,11 +1096,11 @@ def main():
     # data_train = data_train[:128]
     # data_val = data_val[:128]
     nae.util_printer.print_green('Start training ...', background=True)
-    wdb_notes = f'NAE_DYNAMIC - {model_params["num_layers_lstm"]} LSTM layers, {model_params["hidden_size"]} hidden size, lr={model_params["lr"]}, batch_size={training_params["batch_size_train"]}'
     if enable_wandb:
-        nae.init_wandb('nae', run_id=wdb_run_id, resume=wdb_resume, wdb_notes=wdb_notes)
-    saved_model_dir = nae.train(data_train, data_val, checkpoint_path=checkout_path, enable_wandb=enable_wandb)
-
+        nae.init_wandb('nae-dynamic', run_id=wdb_run_id, resume=wdb_resume, wdb_notes=wdb_notes)
+    saved_model_dir = nae.train(data_train, data_val, checkpoint_path=checkout_path, enable_wandb=enable_wandb, 
+                                test_anomaly=False, 
+                                test_cuda_blocking=False)
 
 if __name__ == '__main__':
     main()
