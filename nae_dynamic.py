@@ -129,6 +129,33 @@ class VLSLSTM(nn.Module):
         outputs_aureg_pad = pad_sequence(outputs_aureg_unpad, batch_first=True) 
         return outputs_teafo_pad, outputs_aureg_pad
     
+    # # có thể IMPROVE: sử dụng hàm này thay cho hàm trên và kiểm tra sự khác nhau về kết quả và tốc độ
+    # def forward(self, x, lengths_in, mask_in, lengths_aureg, mask_aureg):
+    #     this_batch_size = x.size(0)
+    #     packed_x = pack_padded_sequence(x, lengths_in, batch_first=True, enforce_sorted=False)
+    #     hi = torch.zeros(self.num_layers, this_batch_size, self.hidden_size).to(x.device)
+    #     ci = torch.zeros(self.num_layers, this_batch_size, self.hidden_size).to(x.device)
+
+    #     #----- teacher forcing -----
+    #     outputs, (hi, ci) = self.lstm(packed_x, (hi, ci))
+    #     outputs_teafo_pad, _ = pad_packed_sequence(outputs, batch_first=True)
+
+    #     #----- autoregressive -----
+    #     # 1. Lấy output cuối cùng của teacher forcing
+    #     last_indices = (lengths_in - 1).to(outputs_teafo_pad.device)  # (batch_size,)
+    #     input_aureg_init = outputs_teafo_pad[torch.arange(outputs_teafo_pad.size(0), device=outputs_teafo_pad.device), last_indices]
+
+    #     # Chuyển thành (batch_size, 1, hidden_size)
+    #     input_aureg_init = input_aureg_init.unsqueeze(1)
+
+    #     # 2. Truyền vào autoregressive loop
+    #     outputs_aureg_unpad = self.auto_regressive_loop(input_aureg_init, hi, ci, lengths_aureg, mask_aureg)
+
+    #     # 3. Padding outputs_aureg_unpad để trả về dạng pad
+    #     outputs_aureg_pad = pad_sequence(outputs_aureg_unpad, batch_first=True)
+
+    #     return outputs_teafo_pad, outputs_aureg_pad
+    
     def auto_regressive_loop(self, input_aureg_init, hi, ci, lengths_aureg, mask_aureg):
         batch_size = input_aureg_init.size(0)
         max_len = lengths_aureg.max().item()
@@ -137,6 +164,7 @@ class VLSLSTM(nn.Module):
             printer_global.print_red(f'VLSLSTM - mask_aureg.shape[1] != max_len -> exit')
             print('     mask_aureg shape: ', mask_aureg.shape)
             print('     max_len: ', max_len)
+            raise ValueError("mask_aureg.shape[1] != max_len")
             return
 
         # output_seq = torch.zeros(batch_size, max_len, hidden_size).to(input_aureg_init[0].device) # -> hardcore calculate
@@ -155,6 +183,7 @@ class VLSLSTM(nn.Module):
                 print(f'     current_mask.shape[0] == 0 -> exit. t: {t}, max_len: {max_len}')
                 print('     mask_aureg shape: ', mask_aureg.shape)
                 print('     max_len: ', max_len)
+                raise ValueError("There might be some error in mask making process")
                 break
 
             # Bỏ những phần tử được padding dựa vào mask, các tensor sẽ được rút ngắn lại theo chiều batch_size
@@ -457,7 +486,7 @@ class NAEDynamicLSTM():
                         # time_flag_1 = time.time() # load data time
                         with autocast():
                             inputs_lstm = self.encoder(inputs_pad)
-                            outputs_teafo_pad, output_aureg_pad = self.vls_lstm(inputs_lstm, lengths_teafo, lengths_aureg, mask_aureg)
+                            outputs_teafo_pad, output_aureg_pad = self.vls_lstm(inputs_lstm, lengths_in, lengths_aureg, mask_aureg)
                             output_teafo_pad_de = self.decoder(outputs_teafo_pad)
                             output_aureg_pad_de = self.decoder(output_aureg_pad)
                             
@@ -601,7 +630,7 @@ class NAEDynamicLSTM():
                 # 2. ----- FOR VALIDATION -----
                 try:
                     # logging.info(f"VALIDATION:")
-                    mean_loss_total_val_log, \
+                    mean_loss_total_log_val, mean_loss_1_log_val, mean_loss_2_log_val, mean_loss_3_log_val, \
                     (mean_ade_entire,   std_ade_entire), \
                     (mean_ade_future,   std_ade_future), \
                     (mean_ade_past,     std_ade_past), \
@@ -626,7 +655,10 @@ class NAEDynamicLSTM():
                 if enable_wandb:
                     total_training_time = time.time() - start_t
                     wandb.log({
-                        'valid_loss_total': mean_loss_total_val_log,
+                        'valid_loss_total': mean_loss_total_log_val,
+                        'valid_loss_1': mean_loss_1_log_val,
+                        'valid_loss_2': mean_loss_2_log_val,
+                        'valid_loss_3': mean_loss_3_log_val,
                     }, step=epoch)
 
                     wandb.log({
@@ -689,17 +721,17 @@ class NAEDynamicLSTM():
                     }, step=epoch)
 
                 if (epoch) % 1 == 0:
-                    self.util_printer.print_green(f'Epoch [{epoch}/{self.num_epochs}] {run_time_total/60:.3f} mins', background=False)
                     run_time_total = time.time() - start_t
+                    self.util_printer.print_green(f'Epoch [{epoch}/{self.num_epochs}] {run_time_total/60:.3f} mins', background=False)
                     print(f'    Training speed:     {time_total_epoch:.3f} s/epoch')
                     print(f'    Training time left: {(self.num_epochs - (epoch+1)) * time_total_epoch/3600:.2f} hours')
                     print(f'    training time %:    {time_train_epoch/time_total_epoch:.2f}')
                     print(f'    Validation time %:  {time_valid_epoch/time_total_epoch:.2f}')
                     print(f'    Loss:               {loss_total_train_log:.6f}')
                     print(f'    learning rate:      {self.optimizer.param_groups[0]["lr"]}')
-                    printer_global.print_yellow(f'   count_tiny_grad:         {count_tiny_grad}')
-                    printer_global.print_yellow(f'   count_huge_grad:         {count_huge_grad}')
-                    printer_global.print_green(f'    mean_fe +-:         {mean_fe:.6f} +- {std_fe:.6f}')
+                    printer_global.print_yellow(f'    count_tiny_grad:    {count_tiny_grad}')
+                    printer_global.print_yellow(f'    count_huge_grad:    {count_huge_grad}')
+                    printer_global.print_green(f'    mean_fe +-std:         {mean_fe:.6f} +- {std_fe:.6f}')
                     print('\n-----------------------------------')
                 if epoch < self.warmup_steps:
                     self.scheduler.step()
@@ -826,6 +858,9 @@ class NAEDynamicLSTM():
         self.decoder.eval()
 
         loss_total_log = 0.0
+        loss_1_log = 0.0
+        loss_2_log = 0.0
+        loss_3_log = 0.0
         # sum_mse_all = 0.0
         # sum_mse_xyz = 0.0
         # mean_ade_entire = None
@@ -859,7 +894,7 @@ class NAEDynamicLSTM():
 
                 # Predict
                 inputs_lstm = self.encoder(inputs_pad)
-                outputs_teafo_pad, output_aureg_pad = self.vls_lstm(inputs_lstm, lengths_teafo, lengths_aureg, mask_aureg)
+                outputs_teafo_pad, output_aureg_pad = self.vls_lstm(inputs_lstm, lengths_in, lengths_aureg, mask_aureg)
                 output_teafo_pad_de = self.decoder(outputs_teafo_pad)
                 output_aureg_pad_de = self.decoder(output_aureg_pad)
 
@@ -914,6 +949,9 @@ class NAEDynamicLSTM():
                     # logging.error(f"Epoch {epoch} -      Loss contains NaN!") if debug else None
                     raise ValueError("     NaN detected in loss!")
                 loss_total_log += loss_mean.item()
+                loss_1_log += loss_1_mean.item()
+                loss_2_log += loss_2_mean.item()
+                loss_3_log += loss_3_mean.item()
 
                 ## ----- SCORE -----
                 (mean_ade_entire,   std_ade_entire), \
@@ -934,8 +972,11 @@ class NAEDynamicLSTM():
             return predicted_seqs_all, label_seqs_all, converge_to_final_point_trending
         # get mean value of scored data
         mean_loss_total_log = loss_total_log/len(dataloader.dataset)
+        mean_loss_1_log = loss_1_log/len(dataloader.dataset)
+        mean_loss_2_log = loss_2_log/len(dataloader.dataset)
+        mean_loss_3_log = loss_3_log/len(dataloader.dataset)
         
-        return  mean_loss_total_log, \
+        return  mean_loss_total_log, mean_loss_1_log, mean_loss_2_log, mean_loss_3_log, \
                 (mean_ade_entire,   std_ade_entire), \
                 (mean_ade_future,   std_ade_future), \
                 (mean_ade_past,     std_ade_past), \
