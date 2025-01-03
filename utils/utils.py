@@ -163,11 +163,11 @@ class NAE_Utils:
         ## (Norm Average Displacement Error)
         #       This is for entire prediction 
 
-        nade_entire = self.nade_masked_calculation(ade_entire, labels_combined, mask_combined)
+        nade_entire = self.nade_masked_calculation(ade_entire, labels_combined, mask_combined, 'entire', optimal_speed=False)
         #       This is for future prediction
-        nade_future = self.nade_masked_calculation(ade_future, labels_aureg_pad, mask_aureg)
+        nade_future = self.nade_masked_calculation(ade_future, labels_aureg_pad, mask_aureg, 'future', optimal_speed=False)
         #       This is for past prediction
-        nade_past = self.nade_masked_calculation(ade_past, labels_teafo_pad, mask_teafo)
+        nade_past = self.nade_masked_calculation(ade_past, labels_teafo_pad, mask_teafo, 'past', optimal_speed=False)
         
         ## =================== Final point Calculation ===================
         #       Calculate final step error
@@ -224,41 +224,31 @@ class NAE_Utils:
         ade = torch.sum(displacement_err_list, dim=1)
         # calculate total valide data point of each row in mask_matrix
         total_length = torch.sum(mask_matrix, dim=1)
-        # print('check mask_matrix shape: ', mask_matrix.shape)
-        # # check if all elements of total_length are the same
-        # print('check total_length same: ', torch.all(total_length == total_length[0]))
-        # input()
-        # print('total_length: ', total_length)
-        # input()
-        # # filter unique elements in total_length
-        # total_length_unique = torch.unique(total_length)
-        # print('total_length_unique: ', total_length_unique)
-        # input()
         
         ade = ade/total_length  # mean
         return ade
 
-    def nade_masked_calculation(self, ade, labels, mask_matrix):
+    def nade_masked_calculation(self, ade, labels, mask_matrix, note='', optimal_speed=False):
+        '''
+        in optimal_speed mode, we skip checking if mask_matrix has all zero rows
+        '''
         # Calculate accumulated displacement (step by step) for each trajectory in batch based on mask
         sub_length = torch.norm(labels[:, 1:, :3] - labels[:, :-1, :3], dim=2)
-        mask_combined_valid = mask_matrix[:, 1:] * mask_matrix[:, :-1]
+        mask_combined_valid = mask_matrix[:, 1:] * mask_matrix[:, :-1]  # Xác định các đoạn mà cả hai điểm đầu và cuối đều hợp lệ (tức là không bị mask).
         sub_length_valid = sub_length * mask_combined_valid
         accumulated_length = torch.sum(sub_length_valid, dim=1)    
         nade = ade / accumulated_length
-        # check if any row of mask_matrix is all False elements
-        matrix_check = torch.sum(mask_matrix, dim=1)
-        for m in matrix_check:
-            if m == 0:
-                print('Found a row with all False elements 1')
-                input()
         
-        matrix_valid_check = torch.sum(mask_combined_valid, dim=1)
-        for i, m in enumerate(matrix_valid_check):
-            if m == 0:
-                print('Found a row with all False elements 2')
-                print(mask_matrix[i])
-                print(mask_matrix[i, 1:])
-                print(mask_matrix[i, :-1])
+        if not optimal_speed:
+            # check if any row of mask_matrix is all False elements
+            if self.has_all_zero_rows(mask_matrix)[0]:
+                print(f'{note} - Found mask_matrix with with all False rows (1)')
+                print(f'     The following rows have all False elements: {self.has_all_zero_rows(mask_matrix)[1]}/{mask_matrix.size(0)}')
+                input()
+            
+            if self.has_all_zero_rows(mask_combined_valid)[0]:
+                print(f'{note} - Found mask_combined_valid with with all False rows (2)')
+                print(f'     The following rows have all False elements: {self.has_all_zero_rows(mask_combined_valid)[1]}/{mask_combined_valid.size(0)}')
                 input()
         
         return nade
@@ -364,3 +354,36 @@ class NAE_Utils:
             if len(one_x_val) != t_value or len(one_y_val) != t_value + k_value:
                 return False
         return True
+    
+
+    def has_all_zero_rows(self, mask_matrix):
+        """
+        Kiểm tra xem mask_matrix có hàng nào toàn phần tử 0 hoặc False hay không.
+        """
+
+        # Tính tổng mỗi hàng
+        row_sums = torch.sum(mask_matrix, dim=1)
+
+        # Tìm các hàng có tổng bằng 0
+        zero_row_indices = torch.where(row_sums == 0)[0].tolist()
+
+        # Kiểm tra nếu có ít nhất một hàng toàn 0
+        has_zero_rows = len(zero_row_indices) > 0
+
+        return has_zero_rows, zero_row_indices
+    
+    def has_all_zero_cols(self, mask_matrix):
+        """
+        Kiểm tra xem mask_matrix có cột nào toàn phần tử 0 hoặc False hay không.
+        """
+
+        # Tính tổng mỗi cột
+        col_sums = torch.sum(mask_matrix, dim=0)
+
+        # Tìm các cột có tổng bằng 0
+        zero_col_indices = torch.where(col_sums == 0)[0].tolist()
+
+        # Kiểm tra nếu có ít nhất một cột toàn 0
+        has_zero_cols = len(zero_col_indices) > 0
+
+        return has_zero_cols, zero_col_indices
