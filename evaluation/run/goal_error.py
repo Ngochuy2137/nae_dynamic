@@ -14,7 +14,7 @@ def main():
     # --- Data and model ---
     id_traj = 'last 70 frames'
     filter_key = 'len_left'
-    filter_value = 'goal_error'
+    filter_value = 'impact_point_err'
     # ## ----------------- 1. Bamboo -----------------
     # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/data_preprocessed/Bamboo'
     # thrown_object = 'bamboo'
@@ -33,19 +33,24 @@ def main():
 
     ## ----- lr = 1e-4
     # parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-lr1e-4_model/bottle-lr1e-4-model_01-01-2025_23-58-41_hiddensize128'
-    # epoch_idx = 5360    #   3600 4680 5360
+    # epoch_idx = 4680    #   3600 4680 5360
     # note = 'lr: 1e-4'
 
     # ## ----- 2.0 * Loss1
-    # parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-2loss1_model/bottle-2loss1-model_02-01-2025_02-26-46_hiddensize128'
-    # epoch_idx = 1180
+    # parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-2loss1_model/bottle-2loss1-model_02-01-2025_09-15-20_hiddensize128'
+    # epoch_idx = 4350    # 4350 5020 6990 7420 11310
     # note = '2.0 * Loss1'
 
-    ## ----- 3.0 * Loss1
-    parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-3loss1_model/bottle-3loss1-model_02-01-2025_12-04-38_hiddensize128'
-    epoch_idx = 4600
-    note = '3.0 * Loss1'
-    
+    # ## ----- 3.0 * Loss1
+    # parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-3loss1_model/bottle-3loss1-model_02-01-2025_12-04-38_hiddensize128'
+    # epoch_idx = 5000    # 4600
+    # note = '3.0 * Loss1'
+
+
+    # ## ====== inlen 25 !=5 ======
+    parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/bottle-1loss1-inlen-25_model/ACC-repair-bottle-1loss1-inlen-25-model_03-01-2025_02-16-45_hiddensize128'
+    epoch_idx = 4800 # 1080 4800
+    note = '1.0 * Loss1, inlen 25'
     
     saved_model_dir = glob.glob(f'{parent_dir}/*epochs{epoch_idx}*')[0]
     # Training parameters 
@@ -83,7 +88,7 @@ def main():
     # Pairing the trajectory into many input-label pairs
     data_test = input_label_generator.generate_input_label_dynamic_seqs(data_test_raw, step_start=5, step_end=-3, increment=1, shuffle=False)
     # Inference
-    predicted_seqs, label_seqs, final_err_var_penalty = nae.validate_and_score(data=data_test, batch_size=1024, shuffle=False, inference=True)
+    predicted_seqs, label_seqs, final_err_var_penalty = nae.validate_and_score(data=data_test, shuffle=False, inference=True)
 
     print(f'There {len(predicted_seqs)} groups of input-label-prediction sequences')
     global_printer.print_green(f'final_err_var_penalty: {final_err_var_penalty}', background=True)

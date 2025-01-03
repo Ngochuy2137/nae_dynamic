@@ -286,11 +286,12 @@ class NAEDynamicLSTM():
         self.util_plotter = Plotter()
         self.wandb_run_url = ''
 
-        print('\n-----------------------------------')
-        print('Parameters number of encoder: ', self.utils.count_parameters(self.encoder))
-        print('Parameters number of LSTM: ', self.utils.count_parameters(self.vls_lstm))
-        print('Parameters number of decoder: ', self.utils.count_parameters(self.decoder))
-        print('Total number of parameters: ', self.utils.count_parameters(self.encoder) + self.utils.count_parameters(self.vls_lstm) + self.utils.count_parameters(self.decoder))
+        print('\n')
+        printer_global.print_green('----------------- MODEL PARAMS NUMBER -----------------', background=True)
+        print('     Parameters number of encoder: ', self.utils.count_parameters(self.encoder))
+        print('     Parameters number of LSTM: ', self.utils.count_parameters(self.vls_lstm))
+        print('     Parameters number of decoder: ', self.utils.count_parameters(self.decoder))
+        print('     Total number of parameters: ', self.utils.count_parameters(self.encoder) + self.utils.count_parameters(self.vls_lstm) + self.utils.count_parameters(self.decoder))
 
 
     def warmup_lr_scheduler(self, epoch):
@@ -326,6 +327,21 @@ class NAEDynamicLSTM():
         mask_aureg = torch.arange(lengths_aureg.max().item()).expand(len(lengths_aureg), lengths_aureg.max().item()) < lengths_aureg.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
         mask_reconstruction = torch.arange(lengths_reconstruction.max().item()).expand(len(lengths_reconstruction), lengths_reconstruction.max().item()) < lengths_reconstruction.unsqueeze(1) # shape: (batch_size, max_seq_len_out)
         
+        
+        # # check if the mask is correct:
+        # if self.utils.has_all_zero_rows(mask_in)[0]:
+        #     print('     mask_in has all zero rows')
+        #     input()
+        # if self.utils.has_all_zero_rows(mask_teafo)[0]:
+        #     print('     mask_teafo has all zero rows')
+        #     input()
+        # if self.utils.has_all_zero_rows(mask_aureg)[0]:
+        #     print('     mask_aureg has all zero rows')
+        #     input()
+        # if self.utils.has_all_zero_rows(mask_reconstruction)[0]:
+        #     print('     mask_reconstruction has all zero rows')
+        #     input()
+
         return (
             (inputs_pad, lengths_in, mask_in),
             (labels_teafo_pad, lengths_teafo, mask_teafo),
@@ -333,7 +349,7 @@ class NAEDynamicLSTM():
             (labels_reconstruction_pad, lengths_reconstruction, mask_reconstruction),
         )
     
-    def train(self, data_train, data_val, checkpoint_path=None, enable_wandb=False, test_anomaly=False, test_cuda_blocking=False, logging_level=logging.WARNING, debug=False):
+    def train(self, data_train, data_val, checkpoint_path=None, enable_wandb=False,  save_model=True, test_anomaly=False, test_cuda_blocking=False, logging_level=logging.WARNING, debug=False):
         # self._init_logging(logging_level, test_anomaly, test_cuda_blocking)
         scaler = GradScaler()
         if checkpoint_path:
@@ -464,6 +480,28 @@ class NAEDynamicLSTM():
 
                         scaler.scale(loss_mean).backward()
 
+                        # Clip gradient
+                        max_norm = 5.0
+                        torch.nn.utils.clip_grad_norm_(
+                            list(self.encoder.parameters()) + list(self.vls_lstm.parameters()) + list(self.decoder.parameters()),
+                            max_norm=max_norm
+                        )
+
+                        models = [self.encoder, self.vls_lstm, self.decoder]
+                        total_gradient_norm = self.compute_total_gradient_norm(models)
+                        total_gradient_norm = torch.tensor(total_gradient_norm)
+                        if total_gradient_norm < 1e-5 or torch.isnan(total_gradient_norm):
+                            self.util_printer.print_purple(f"Epoch {epoch} - Batch {batch_idx}/{len(dataloader_train)} - Total Gradient Norm: {total_gradient_norm}")
+                            # input('DEBUG')
+                        # check infinities
+                        elif total_gradient_norm > 100 or torch.isinf(total_gradient_norm):
+                            self.util_printer.print_red(f"Epoch {epoch} - Batch {batch_idx}/{len(dataloader_train)} - Total Gradient Norm: {total_gradient_norm}")
+                            # input('DEBUG')
+                        else:
+                            # self.util_printer.print_green(f"Epoch {epoch} - Batch {batch_idx}/{len(dataloader_train)} - Total Gradient Norm: {total_gradient_norm}")
+                            pass
+
+
                         # time_flag_4 = time.time() # backward pass time
                         # self.optimizer.step()
 
@@ -510,7 +548,7 @@ class NAEDynamicLSTM():
                 loss_3_train_log /= len(dataloader_train)
                 loss_all_log.append([loss_1_train_log, loss_2_train_log, loss_3_train_log, loss_total_train_log])
 
-                if epoch % self.save_interval == 0:
+                if epoch % self.save_interval == 0 and save_model:
                     self.save_model(epoch, len(data_train), start_t, loss_all_log)
                 time_train_epoch = time.time() - time_start_epoch
                 
@@ -606,7 +644,7 @@ class NAEDynamicLSTM():
                     }, step=epoch)
 
                 if (epoch) % 1 == 0:
-                    self.util_printer.print_green(f'Epoch [{epoch}/{self.num_epochs}]', background=False)
+                    self.util_printer.print_green(f'Epoch [{epoch}/{self.num_epochs}] {run_time_total/60:.3f} mins', background=False)
                     run_time_total = time.time() - start_t
                     print(f'    Training speed:     {time_total_epoch:.3f} s/epoch')
                     print(f'    Training time left: {(self.num_epochs - (epoch+1)) * time_total_epoch/3600:.2f} hours')
@@ -614,6 +652,7 @@ class NAEDynamicLSTM():
                     print(f'    Validation time %:  {time_valid_epoch/time_total_epoch:.2f}')
                     print(f'    Loss:               {loss_total_train_log:.6f}')
                     print(f'    learning rate:      {self.optimizer.param_groups[0]["lr"]}')
+                    printer_global.print_green(f'    mean_fe +-:         {mean_fe:.6f} +- {std_fe:.6f}')
                     print('\n-----------------------------------')
                 if epoch < self.warmup_steps:
                     self.scheduler.step()
@@ -921,6 +960,15 @@ class NAEDynamicLSTM():
         # merge two sequences
         predicted_seq = self.concat_output_seq(output_teafo_unpad, output_aureg_unpad)
         return predicted_seq
+
+    def compute_total_gradient_norm(self, models):
+        total_norm = 0
+        for model in models:  # Iterate through encoder, LSTM, decoder
+            for param in model.parameters():
+                if param.grad is not None:
+                    param_norm = param.grad.data.norm(2)  # L2 norm
+                    total_norm += param_norm.item() ** 2
+        return total_norm ** 0.5  # Final L2 norm
 
 def main():
     device = torch.device('cuda')
