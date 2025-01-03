@@ -241,17 +241,48 @@ class NAE_Utils:
         
         if not optimal_speed:
             # check if any row of mask_matrix is all False elements
-            if self.has_all_zero_rows(mask_matrix)[0]:
+            check_mask_matrix = self.has_all_zero_rows(mask_matrix)
+            if check_mask_matrix[0]:
+                nade = torch.zeros_like(nade)
                 print(f'{note} - Found mask_matrix with with all False rows (1)')
-                print(f'     The following rows have all False elements: {self.has_all_zero_rows(mask_matrix)[1]}/{mask_matrix.size(0)}')
-                input()
+                print(f'     The following rows have all False elements: {check_mask_matrix[1]}/{mask_matrix.size(0)}')
+                # input()
             
-            if self.has_all_zero_rows(mask_combined_valid)[0]:
+            check_mask_combined_valid = self.has_all_zero_rows(mask_combined_valid)
+            if check_mask_combined_valid[0]:
+                # reset nade to 0 vector
+                nade = torch.zeros_like(nade)
                 print(f'{note} - Found mask_combined_valid with with all False rows (2)')
-                print(f'     The following rows have all False elements: {self.has_all_zero_rows(mask_combined_valid)[1]}/{mask_combined_valid.size(0)}')
-                input()
+                print(f'     The following rows have all False elements: {check_mask_combined_valid[1]}/{mask_combined_valid.size(0)}')
+                # for err_row in check_mask_combined_valid[1]:
+                #     print(f'     Err row {err_row}: {mask_matrix[err_row]}'); input()
+                # input()
         
         return nade
+    
+    # def nade_masked_calculation(self, ade, labels, mask_matrix, note='', optimal_speed=False):
+    #     # Calculate accumulated displacement (step by step) for each trajectory in batch based on mask
+    #     sub_length = torch.norm(labels[:, 1:, :3] - labels[:, :-1, :3], dim=2)
+    #     mask_combined_valid = mask_matrix[:, 1:] * mask_matrix[:, :-1]
+    #     sub_length_valid = sub_length * mask_combined_valid
+    #     accumulated_length = torch.sum(sub_length_valid, dim=1)    
+    #     nade = ade / accumulated_length
+    #     # check if any row of mask_matrix is all False elements
+    #     matrix_check = torch.sum(mask_matrix, dim=1)
+    #     for m in matrix_check:
+    #         if m == 0:
+    #             print('Found a row with all False elements 1')
+    #             input()
+        
+    #     matrix_valid_check = torch.sum(mask_combined_valid, dim=1)
+    #     for i, m in enumerate(matrix_valid_check):
+    #         if m == 0:
+    #             print('Found a row with all False elements 2')
+    #             print(mask_matrix[i])
+    #             print(mask_matrix[i, 1:])
+    #             print(mask_matrix[i, :-1])
+        
+    #     return nade
     
     def final_step_prediction_error(self, predictions, labels, mask_combined, mask_aureg):
         batch_size = mask_combined.size(0)
