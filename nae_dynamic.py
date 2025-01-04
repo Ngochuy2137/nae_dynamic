@@ -409,7 +409,7 @@ class NAEDynamicLSTM():
             (labels_reconstruction_pad, lengths_reconstruction, mask_reconstruction),
         )
     
-    def train(self, data_train, data_val, checkpoint_path=None, enable_wandb=False,  save_model=True, test_anomaly=False, test_cuda_blocking=False, logging_level=logging.WARNING, debug=False):
+    def train(self, data_train, data_val, checkpoint_path=None, enable_wandb=False,  save_model=True, test_anomaly=False, test_cuda_blocking=False, logging_level=logging.WARNING, debug=False, grad_norm_clip=None):
         # self._init_logging(logging_level, test_anomaly, test_cuda_blocking)
         scaler = GradScaler()
         if checkpoint_path:
@@ -433,8 +433,10 @@ class NAEDynamicLSTM():
                                                 pin_memory=True,
                                                 persistent_workers=True)
 
+            count_nan_grad = 0
             count_tiny_grad = 0
             count_huge_grad = 0
+            count_inf_grad = 0
             for epoch in range(start_epoch, self.num_epochs):
                 time_start_epoch = time.time()
                 self.encoder.train()
@@ -551,28 +553,31 @@ class NAEDynamicLSTM():
 
                         scaler.scale(loss_mean).backward()
 
-                        # Clip gradient
-                        max_norm = 5.0
-                        torch.nn.utils.clip_grad_norm_(
-                            list(self.encoder.parameters()) + list(self.vls_lstm.parameters()) + list(self.decoder.parameters()),
-                            max_norm=max_norm
-                        )
+
 
                         models = [self.encoder, self.vls_lstm, self.decoder]
                         total_gradient_norm = self.compute_total_gradient_norm(models)
-                        total_gradient_norm = torch.tensor(total_gradient_norm)
-                        if total_gradient_norm < 1e-5 or torch.isnan(total_gradient_norm):
+                        if total_gradient_norm == float('nan'):
                             self.util_printer.print_purple(f"Epoch {epoch} - Batch {batch_idx}/{len(dataloader_train)} - Total Gradient Norm: {total_gradient_norm}")
+                            count_nan_grad += 1
+                        if total_gradient_norm < 1e-5:
+                            self.util_printer.print_pink(f"Epoch {epoch} - Batch {batch_idx}/{len(dataloader_train)} - Total Gradient Norm: {total_gradient_norm}")
                             count_tiny_grad += 1
-                            # input('DEBUG')
                         # check infinities
-                        elif total_gradient_norm > 100 or torch.isinf(total_gradient_norm):
-                            self.util_printer.print_red(f"Epoch {epoch} - Batch {batch_idx}/{len(dataloader_train)} - Total Gradient Norm: {total_gradient_norm}")
+                        elif total_gradient_norm > 100:
+                            self.util_printer.print_yellow(f"Epoch {epoch} - Batch {batch_idx}/{len(dataloader_train)} - Total Gradient Norm: {total_gradient_norm}")
                             count_huge_grad += 1
-                            # input('DEBUG')
-                        else:
-                            # self.util_printer.print_green(f"Epoch {epoch} - Batch {batch_idx}/{len(dataloader_train)} - Total Gradient Norm: {total_gradient_norm}")
-                            pass
+                        elif total_gradient_norm == float('inf'):
+                            self.util_printer.print_red(f"Epoch {epoch} - Batch {batch_idx}/{len(dataloader_train)} - Total Gradient Norm: {total_gradient_norm}")
+                            count_inf_grad += 1
+
+                        # Clip gradient
+                        if grad_norm_clip and grad_norm_clip > 0:
+                            # max_norm = 5.0
+                            torch.nn.utils.clip_grad_norm_(
+                                list(self.encoder.parameters()) + list(self.vls_lstm.parameters()) + list(self.decoder.parameters()),
+                                max_norm=grad_norm_clip
+                            )
 
 
                         # time_flag_4 = time.time() # backward pass time
@@ -729,8 +734,11 @@ class NAEDynamicLSTM():
                     print(f'    Validation time %:  {time_valid_epoch/time_total_epoch:.2f}')
                     print(f'    Loss:               {loss_total_train_log:.6f}')
                     print(f'    learning rate:      {self.optimizer.param_groups[0]["lr"]}')
+
+                    printer_global.print_yellow(f'    count_nan_grad:      {count_nan_grad}')
                     printer_global.print_yellow(f'    count_tiny_grad:    {count_tiny_grad}')
                     printer_global.print_yellow(f'    count_huge_grad:    {count_huge_grad}')
+                    printer_global.print_yellow(f'    count_inf_grad:     {count_inf_grad}')
                     printer_global.print_green(f'    mean_fe +-std:         {mean_fe:.6f} +- {std_fe:.6f}')
                     print('\n-----------------------------------')
                 if epoch < self.warmup_steps:
@@ -1049,14 +1057,63 @@ class NAEDynamicLSTM():
         predicted_seq = self.concat_output_seq(output_teafo_unpad, output_aureg_unpad)
         return predicted_seq
 
+    # def compute_total_gradient_norm(self, models):
+    #     total_norm = 0
+    #     for model in models:  # Iterate through encoder, LSTM, decoder
+    #         for param in model.parameters():
+    #             if param.grad is not None:
+    #                 param_norm = param.grad.data.norm(2)  # L2 norm
+    #                 total_norm += param_norm.item() ** 2
+    #     return total_norm ** 0.5  # Final L2 norm
+
     def compute_total_gradient_norm(self, models):
-        total_norm = 0
-        for model in models:  # Iterate through encoder, LSTM, decoder
+        """
+        Tính tổng norm L2 của gradient từ nhiều mô hình (models),
+        đảm bảo tất cả tensor trên cùng một thiết bị.
+
+        Args:
+            models (list): Danh sách các mô hình (encoder, LSTM, decoder, etc.).
+            
+        Returns:
+            float: Tổng gradient norm L2 (hoặc inf/nan nếu phát hiện bất thường).
+        """
+        # Lấy thiết bị từ mô hình đầu tiên
+        device = next(models[0].parameters()).device
+        total_norm = torch.tensor(0.0, dtype=torch.float64, device=device)  # Đặt tensor trên thiết bị đúng
+        
+        for md_idx, model in enumerate(models):
             for param in model.parameters():
                 if param.grad is not None:
-                    param_norm = param.grad.data.norm(2)  # L2 norm
-                    total_norm += param_norm.item() ** 2
-        return total_norm ** 0.5  # Final L2 norm
+                    # Tính norm L2 của gradient cho từng tham số
+                    param_norm = param.grad.data.norm(2).to(device)  # Đảm bảo tensor nằm trên đúng thiết bị                    
+                    # Kiểm tra giá trị inf hoặc nan
+                    if torch.isinf(param_norm):
+                        print(f"        Warning: MODEL {md_idx} - Gradient norm is inf for parameter {param}")
+                        if md_idx == 1:
+                            input('DEBUG LSTM please')
+                        return float('inf')
+                    if torch.isnan(param_norm):
+                        print(f"        Warning: MODEL {md_idx} - Gradient norm is NaN for parameter {param}")
+                        if md_idx == 1:
+                            input('DEBUG LSTM please')
+                        return float('nan')
+                    
+                    # Cộng dồn bình phương của norm
+                    total_norm += param_norm ** 2
+        
+        # Tính căn bậc hai tổng bình phương để ra norm tổng
+        total_norm = total_norm.sqrt()
+
+        # Kiểm tra tổng norm cuối cùng có hợp lệ không
+        if torch.isinf(total_norm):
+            print("Total Gradient Norm is inf!")
+            return float('inf')
+        if torch.isnan(total_norm):
+            print("Total Gradient Norm is NaN!")
+            return float('nan')
+
+        return total_norm.item()
+
 
     def save_model_config(self, model_dir):
         with open(os.path.join(model_dir, 'model_config.json'), 'w') as f:
