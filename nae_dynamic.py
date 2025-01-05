@@ -319,7 +319,7 @@ class NAEDynamicLSTM():
         self.vls_lstm = VLSLSTM(hidden_size, hidden_size, num_layers_lstm, dropout_rate=dropout_rate).to(device)
         self.decoder = Decoder(hidden_size, output_size).to(device)
 
-        self.criterion = nn.MSELoss(reduction='none').to(device)  # NOTE: Reduction 'none' to apply masking, default is 'mean'
+        # self.criterion = nn.MSELoss(reduction='none').to(device)  # NOTE: Reduction 'none' to apply masking, default is 'mean'
         # self.optimizer = optim.Adam(list(self.encoder.parameters()) + list(self.vls_lstm.parameters()) + list(self.decoder.parameters()), lr=lr)
         
         self.weight_decay = weight_decay
@@ -495,56 +495,61 @@ class NAEDynamicLSTM():
                             # time_flag_2 = time.time() # forward pass time
 
                             ##  ----- LOSS 1: TEACHER FORCING -----
-                            loss_1 = self.criterion(output_teafo_pad_de, labels_teafo_pad).sum(dim=-1)  # Shape: (batch_size, max_seq_len_out)
-                            # Tạo mask dựa trên chiều dài thực
-                            loss_1_mask = loss_1 * mask_teafo  # Masked loss
-                            loss_1_mean = 0
-                            if mask_teafo.sum() != 0:
-                                loss_1_mean = loss_1_mask.sum() / mask_teafo.sum()
-                            else:
-                                self.util_printer.print_red(f'Loss 1 - mask_teafo.sum() == 0')
-                                input('DEBUG')
+                            # loss_1 = self.criterion(output_teafo_pad_de, labels_teafo_pad).sum(dim=-1)  # Shape: (batch_size, max_seq_len_out)
+                            # # Tạo mask dựa trên chiều dài thực
+                            # loss_1_mask = loss_1 * mask_teafo  # Masked loss
+                            # loss_1_mean = 0
+                            # if mask_teafo.sum() != 0:
+                            #     loss_1_mean = loss_1_mask.sum() / mask_teafo.sum()
+                            # else:
+                            #     self.util_printer.print_red(f'Loss 1 - mask_teafo.sum() == 0')
+                            #     input('DEBUG')
+
+                            loss_1_mean = self.compute_masked_mse_loss(predictions=output_teafo_pad_de, labels=labels_teafo_pad, mask=mask_teafo)
 
                             ## ----- LOSS 2: AUTOREGRESSIVE -----
-                            loss_2 = self.criterion(output_aureg_pad_de, labels_aureg_pad).sum(dim=-1)
-                            loss_2_mask = loss_2 * mask_aureg
-                            loss_2_mean = 0
-                            if mask_aureg.sum() != 0:
-                                loss_2_mean = loss_2_mask.sum() / mask_aureg.sum()
-                            else:
-                                self.util_printer.print_red(f'Loss 2 - mask_aureg.sum() == 0')
-                                input('DEBUG')
+                            # loss_2 = self.criterion(output_aureg_pad_de, labels_aureg_pad).sum(dim=-1)
+                            # loss_2_mask = loss_2 * mask_aureg
+                            # loss_2_mean = 0
+                            # if mask_aureg.sum() != 0:
+                            #     loss_2_mean = loss_2_mask.sum() / mask_aureg.sum()
+                            # else:
+                            #     self.util_printer.print_red(f'Loss 2 - mask_aureg.sum() == 0')
+                            #     input('DEBUG')
+
+                            loss_2_mean = self.compute_masked_mse_loss(predictions=output_aureg_pad_de, labels=labels_aureg_pad, mask=mask_aureg)
 
 
                             ## ----- LOSS 2-1: Last point error -----
-                            mask_aureg_int = mask_aureg.int()
-                            last_indices = mask_aureg_int.flip(dims=[1]).argmax(dim=1)
-                            last_indices = mask_aureg_int.size(1) - 1 - last_indices
-                            mask_last_point = torch.zeros_like(mask_aureg_int, dtype=torch.bool)
-                            mask_last_point[torch.arange(mask_aureg_int.size(0), device=mask_aureg_int.device), last_indices] = 1
-                            loss_2_1_mask = loss_2 * mask_last_point
-                            loss_2_1_mean = 0
-                            if mask_last_point.sum() != 0:
-                                loss_2_1_mean = loss_2_1_mask.sum() / mask_last_point.sum()
-                            else:
-                                self.util_printer.print_red(f'Loss 2-1 - mask_last_point.sum() == 0')
-                                input('DEBUG')
+                            # mask_aureg_int = mask_aureg.int()
+                            # last_indices = mask_aureg_int.flip(dims=[1]).argmax(dim=1)
+                            # last_indices = mask_aureg_int.size(1) - 1 - last_indices
+                            # mask_last_point = torch.zeros_like(mask_aureg_int, dtype=torch.bool)
+                            # mask_last_point[torch.arange(mask_aureg_int.size(0), device=mask_aureg_int.device), last_indices] = 1
+                            # loss_2_1_mask = loss_2 * mask_last_point
+                            # loss_2_1_mean = 0
+                            # if mask_last_point.sum() != 0:
+                            #     loss_2_1_mean = loss_2_1_mask.sum() / mask_last_point.sum()
+                            # else:
+                            #     self.util_printer.print_red(f'Loss 2-1 - mask_last_point.sum() == 0')
+                            #     input('DEBUG')
 
 
                             ## ----- LOSS 3: RECONSTRUCTION -----
-                            loss_3 = self.criterion(self.decoder(inputs_lstm), labels_reconstruction_pad).sum(dim=-1)
-                            loss_3_mask = loss_3 * mask_reconstruction
-                            loss_3_mean = 0
-                            if mask_reconstruction.sum() != 0:
-                                loss_3_mean = loss_3_mask.sum() / mask_reconstruction.sum()
-                            else:
-                                self.util_printer.print_red(f'Loss 3 - mask_reconstruction.sum() == 0')
-                                input('DEBUG')
+                            # loss_3 = self.criterion(self.decoder(inputs_lstm), labels_reconstruction_pad).sum(dim=-1)
+                            # loss_3_mask = loss_3 * mask_reconstruction
+                            # loss_3_mean = 0
+                            # if mask_reconstruction.sum() != 0:
+                            #     loss_3_mean = loss_3_mask.sum() / mask_reconstruction.sum()
+                            # else:
+                            #     self.util_printer.print_red(f'Loss 3 - mask_reconstruction.sum() == 0')
+                            #     input('DEBUG')
+
+                            loss_3_mean = self.compute_masked_mse_loss(predictions=self.decoder(inputs_lstm), labels=labels_reconstruction_pad, mask=mask_reconstruction)
 
                             
-                            loss_mean = self.loss1_weight*loss_1_mean + self.loss2_weight*loss_2_mean + loss_3_mean + self.loss2_1_weight * loss_2_1_mean
-
-                            # time_flag_3 = time.time() # loss cal time
+                            # loss_mean = self.loss1_weight*loss_1_mean + self.loss2_weight*loss_2_mean + loss_3_mean + self.loss2_1_weight * loss_2_1_mean
+                            loss_mean = self.loss1_weight*loss_1_mean + self.loss2_weight*loss_2_mean + loss_3_mean
 
                         # Backward pass
                         self.optimizer.zero_grad()
@@ -564,16 +569,15 @@ class NAEDynamicLSTM():
                             self.util_printer.print_pink(f"Epoch {epoch} - Batch {batch_idx}/{len(dataloader_train)} - Total Gradient Norm: {total_gradient_norm}")
                             count_tiny_grad += 1
                         # check infinities
+                        if total_gradient_norm == float('inf'):
+                            self.util_printer.print_red(f"Epoch {epoch} - Batch {batch_idx}/{len(dataloader_train)} - Total Gradient Norm: {total_gradient_norm}")
+                            count_inf_grad += 1
                         elif total_gradient_norm > 100:
                             self.util_printer.print_yellow(f"Epoch {epoch} - Batch {batch_idx}/{len(dataloader_train)} - Total Gradient Norm: {total_gradient_norm}")
                             count_huge_grad += 1
-                        elif total_gradient_norm == float('inf'):
-                            self.util_printer.print_red(f"Epoch {epoch} - Batch {batch_idx}/{len(dataloader_train)} - Total Gradient Norm: {total_gradient_norm}")
-                            count_inf_grad += 1
 
                         # Clip gradient
                         if grad_norm_clip and grad_norm_clip > 0:
-                            # max_norm = 5.0
                             torch.nn.utils.clip_grad_norm_(
                                 list(self.encoder.parameters()) + list(self.vls_lstm.parameters()) + list(self.decoder.parameters()),
                                 max_norm=grad_norm_clip
@@ -757,6 +761,58 @@ class NAEDynamicLSTM():
             wandb.finish()
         return final_model_dir
     
+    # def compute_masked_mse_loss(self, predictions, labels, mask):
+    #     """
+    #     Compute the masked MSE loss for a batch of sequences, skipping fully padded sequences.
+    #     """
+    #     # Expand mask to match feature dimensions
+    #     mask = mask.unsqueeze(-1)  # Shape: (batch_size, max_seq_len, 1)
+
+    #     # Compute squared differences and apply mask
+    #     squared_diff = (predictions - labels) ** 2
+    #     masked_squared_diff = squared_diff * mask  # Mask padding values
+
+    #     # Sum squared differences and count valid elements
+    #     sum_squared_diff = masked_squared_diff.sum(dim=(1, 2))  # Sum over seq_len and feature_dim
+    #     valid_count = mask.sum(dim=(1, 2))                      # Count of valid elements
+
+    #     # Create a mask to skip fully padded sequences
+    #     valid_mask = valid_count > 0  # Boolean mask: True for valid sequences, False for fully padded ones
+
+    #     # Filter out invalid sequences
+    #     sum_squared_diff = sum_squared_diff[valid_mask]  # Only keep valid sequences
+    #     valid_count = valid_count[valid_mask]            # Only keep valid counts
+
+    #     # Compute mean squared error per sequence
+    #     mse_per_sequence = sum_squared_diff / valid_count
+
+    #     # Average over the remaining valid sequences
+    #     batch_mse_loss = mse_per_sequence.mean()
+
+    #     return batch_mse_loss
+
+
+    def compute_masked_mse_loss(self, predictions, labels, mask):
+        """
+        Compute the masked MSE loss for a batch of sequences.
+        """
+        # Expand mask to match feature dimensions
+        mask = mask.unsqueeze(-1)  # Shape: (batch_size, max_seq_len, 1)
+
+        # Compute squared differences and apply mask
+        squared_diff = (predictions - labels) ** 2
+        masked_squared_diff = squared_diff * mask  # Mask padding values
+
+        # Sum squared differences and count valid elements
+        sum_squared_diff = masked_squared_diff.sum(dim=(1, 2))  # Sum over seq_len and feature_dim
+        valid_count = mask.sum(dim=(1, 2)).clamp(min=1e-8)       # Avoid division by zero
+
+        # Compute mean squared error per sequence and average over batch
+        mse_per_sequence = sum_squared_diff / valid_count       # /t in the paper
+        batch_mse_loss = mse_per_sequence.mean()                # Mean over batch
+
+        return batch_mse_loss
+
     def _init_logging(self, logging_level, test_anomaly, test_cuda_blocking):    
         # Save to self.model_dir
         os.makedirs(self.model_dir, exist_ok=True)
@@ -915,26 +971,32 @@ class NAEDynamicLSTM():
                     # continue
                 
                 ##  ----- LOSS 1: TEACHER FORCING -----
-                loss_1 = self.criterion(output_teafo_pad_de, labels_teafo_pad).sum(dim=-1)  # Shape: (batch_size, max_seq_len_out)
-                # Tạo mask dựa trên chiều dài thực
-                loss_1_mask = loss_1 * mask_teafo  # Masked loss
-                loss_1_mean = 0
-                if mask_teafo.sum() != 0:
-                    loss_1_mean = loss_1_mask.sum() / mask_teafo.sum()
+                # loss_1 = self.criterion(output_teafo_pad_de, labels_teafo_pad).sum(dim=-1)  # Shape: (batch_size, max_seq_len_out)
+                # # Tạo mask dựa trên chiều dài thực
+                # loss_1_mask = loss_1 * mask_teafo  # Masked loss
+                # loss_1_mean = 0
+                # if mask_teafo.sum() != 0:
+                #     loss_1_mean = loss_1_mask.sum() / mask_teafo.sum()
+
+                loss_1_mean = self.compute_masked_mse_loss(predictions=output_teafo_pad_de, labels=labels_teafo_pad, mask=mask_teafo)
 
                 ## ----- LOSS 2: AUTOREGRESSIVE -----
-                loss_2 = self.criterion(output_aureg_pad_de, labels_aureg_pad).sum(dim=-1)
-                loss_2_mask = loss_2 * mask_aureg
-                loss_2_mean = 0
-                if mask_aureg.sum() != 0:
-                    loss_2_mean = loss_2_mask.sum() / mask_aureg.sum()
+                # loss_2 = self.criterion(output_aureg_pad_de, labels_aureg_pad).sum(dim=-1)
+                # loss_2_mask = loss_2 * mask_aureg
+                # loss_2_mean = 0
+                # if mask_aureg.sum() != 0:
+                #     loss_2_mean = loss_2_mask.sum() / mask_aureg.sum()
+
+                loss_2_mean = self.compute_masked_mse_loss(predictions=output_aureg_pad_de, labels=labels_aureg_pad, mask=mask_aureg)
 
                 ## ----- LOSS 3: RECONSTRUCTION -----
-                loss_3 = self.criterion(self.decoder(inputs_lstm), labels_reconstruction_pad).sum(dim=-1)
-                loss_3_mask = loss_3 * mask_reconstruction
-                loss_3_mean = 0
-                if mask_reconstruction.sum() != 0:
-                    loss_3_mean = loss_3_mask.sum() / mask_reconstruction.sum()
+                # loss_3 = self.criterion(self.decoder(inputs_lstm), labels_reconstruction_pad).sum(dim=-1)
+                # loss_3_mask = loss_3 * mask_reconstruction
+                # loss_3_mean = 0
+                # if mask_reconstruction.sum() != 0:
+                #     loss_3_mean = loss_3_mask.sum() / mask_reconstruction.sum()
+
+                loss_3_mean = self.compute_masked_mse_loss(predictions=self.decoder(inputs_lstm), labels=labels_reconstruction_pad, mask=mask_reconstruction)
 
                 if torch.isnan(loss_1_mean) or torch.isinf(loss_1_mean):
                     print("loss_1_mean contains NaN or Infinity!")
