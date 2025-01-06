@@ -56,26 +56,44 @@ class InputLabelGenerator:
             np.random.shuffle(data_list)
         return data_list
     
-    def generate_input_label_dynamic_seqs(self, data, step_start=None, step_end = None, increment=1, shuffle=False):
+    def generate_input_label_dynamic_seqs(self, samples, step_start=1, step_end=-1, increment=1, shuffle=False):
         data_gen = []
-        if step_start is None or step_start < 1:
-            step_start = 1
-        if step_end is None or step_end > -2:
-            step_end = - 2
-        # self.data.append((input_seq, label_teafo_seq, label_aureg_seq, label_reconstruction_seq))
-        for seq in data:
-            for i in range(step_start, len(seq) + step_end, increment):
-                input_seq = torch.tensor(seq[:i], dtype=torch.float32) 
-                label_teafo_seq = torch.tensor(seq[1:i+1], dtype=torch.float32) 
-                label_aureg_seq = torch.tensor(seq[i+1:], dtype=torch.float32) 
-                label_reconstruction_seq = input_seq
+        for seq in samples:
+            seq = seq['preprocess']['model_data']
+            if len(seq) < step_start + 1:  # Bỏ qua chuỗi quá ngắn
+                continue
 
-                data_gen.append((input_seq, label_teafo_seq, label_aureg_seq, label_reconstruction_seq))
+            for i in range(max(1, step_start), len(seq) + min(-1, step_end), increment):
+                input_seq = torch.tensor(seq[:i], dtype=torch.float32)
+                label_teafo_seq = torch.tensor(seq[1:i+1], dtype=torch.float32)
+                label_aureg_seq = torch.tensor(seq[i+1:], dtype=torch.float32)
+                label_recon_seq = input_seq  # Already a tensor
+                data_gen.append((input_seq, label_teafo_seq, label_aureg_seq, label_recon_seq))
         if shuffle:
             for _ in range(5):
                 np.random.shuffle(data_gen)
         return data_gen
             
+    # def generate_input_label_dynamic_seqs(self, data, step_start=None, step_end = None, increment=1, shuffle=False):
+    #     data_gen = []
+    #     if step_start is None or step_start < 1:
+    #         step_start = 1
+    #     if step_end is None or step_end > -2:
+    #         step_end = - 2
+    #     # self.data.append((input_seq, label_teafo_seq, label_aureg_seq, label_reconstruction_seq))
+    #     for seq in data:
+    #         seq = seq['preprocess']['model_data']
+    #         for i in range(step_start, len(seq) + step_end, increment):
+    #             input_seq = torch.tensor(seq[:i], dtype=torch.float32) 
+    #             label_teafo_seq = torch.tensor(seq[1:i+1], dtype=torch.float32) 
+    #             label_aureg_seq = torch.tensor(seq[i+1:], dtype=torch.float32) 
+    #             label_reconstruction_seq = input_seq
+
+    #             data_gen.append((input_seq, label_teafo_seq, label_aureg_seq, label_reconstruction_seq))
+    #     if shuffle:
+    #         for _ in range(5):
+    #             np.random.shuffle(data_gen)
+    #     return data_gen
 
 
 # Test the function

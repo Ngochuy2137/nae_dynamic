@@ -9,6 +9,9 @@ from python_utils.plotter import Plotter
 from collections import defaultdict
 import torch 
 import random
+import glob
+import os
+import json
 
 class Metric(ABC):
     """
@@ -88,7 +91,7 @@ class Metric(ABC):
 
         return result
     
-    def compute_goal_error(self, pred, lab):
+    def compute_impact_point_err(self, pred, lab):
         # Only calculate the error for last point
         lab_last = lab[-1, :3]
         pred_last = pred[-1, :3]
@@ -117,18 +120,51 @@ class Metric(ABC):
         # Consider one group (input, label, predicted) at a time
         for inp, pred, lab in zip(input_seqs, predicted_seqs, label_seqs):
             # Only calculate the error for last point
-            last_err = self.compute_goal_error(pred, lab)
+            last_err = self.compute_impact_point_err(pred, lab)
             accumulated_error = self.compute_accumulated_error(lab, pred)
 
             err_element = {
                 'input_len': len(inp),
                 'len_left': len(lab) - len(inp),
-                'goal_error': last_err,
+                'impact_point_err': last_err,
                 'accumulated_error': accumulated_error
             }
             err_by_in_len.append(err_element) 
         return err_by_in_len
+    
+    def load_model_config(self, folder_path):
+        """
+        Tìm file và đọc file model_config.json, lưu nội dung vào dictionary.
+        """
+        try:
+            # Tìm file model_config.json trong thư mục
+            for root, _, files in os.walk(folder_path):
+                if "model_config.json" in files:
+                    config_path = os.path.join(root, "model_config.json")
+                    # Đọc nội dung file model_config.json
+                    with open(config_path, "r", encoding="utf-8") as f:
+                        config_dict = json.load(f)
+                    return config_dict
 
+            # Nếu không tìm thấy file
+            raise ValueError("Cannot find model_config.json")
+
+        except Exception as e:
+            raise ValueError(f"Something is wrong with error: {e}")
+
+
+    def search_model_at_epoch(self, parent_dir, epoch_idx):
+        saved_model_dir = glob.glob(f'{parent_dir}/*epochs{epoch_idx}_*')
+        if len(saved_model_dir) == 0:
+            self.util_printer.print_red(f'Cannot find the model with epoch {epoch_idx}', background=True)
+            return None
+        elif len(saved_model_dir) > 1:
+            self.util_printer.print_red(f'More than one model with epoch {epoch_idx}', background=True)
+            for i, model_dir in enumerate(saved_model_dir):
+                self.util_printer.print_yellow(f'   {i+1}. {model_dir}')
+            raise ValueError(f'More than one model with epoch {epoch_idx}')
+        else:
+            return saved_model_dir[0]
 
 class MetricAccumulatedError(Metric):
     def __init__(self):
@@ -147,22 +183,22 @@ class MetricAccumulatedError(Metric):
         self.util_printer.print_green(f'{len(input_seqs)} labels are correct')
 
         # 1. Calculate accumulated error for each prediction
-        goal_error_by_length = []
+        impact_point_err_by_length = []
         # count = 0
 
         # Consider one group (input, label, predicted) at a time
         for inp, pred, lab in zip(input_seqs, predicted_seqs, label_seqs):
             # Only calculate the error for last point
-            last_err = self.compute_goal_error(pred, lab)
+            last_err = self.compute_impact_point_err(pred, lab)
             accumulated_error = self.compute_accumulated_error(lab, pred)
 
             err_by_inlen = {
                 'input_len': len(inp),
                 'len_left': len(lab) - len(inp),
-                'goal_error': last_err,
+                'impact_point_err': last_err,
                 'accumulated_error': accumulated_error
             }
-            goal_error_by_length.append(err_by_inlen) 
+            impact_point_err_by_length.append(err_by_inlen) 
         return err_by_inlen
 
 class MetricAccumulatedError(Metric):
@@ -205,7 +241,7 @@ class MetricAccumulatedError(Metric):
                                             font_size_title=32,
                                             font_size_label=20,
                                             font_size_tick=20,
-                                            font_size_bar_val=15,
+                                            font_size_bar_val=22,
                                             title=f'{thrown_object} - {filter_value} by input length - #{id_traj} - EPOCH {epoch_idx}', 
                                             x_label=label_x, 
                                             y_label=label_y,
@@ -218,7 +254,7 @@ class MetricGoalError(Metric):
     def __init__(self):
         super().__init__()  # call the parent class constructor
         
-    def process_and_plot(self, input_seqs, label_seqs, predicted_seqs, id_traj, thrown_object, filter_value, epoch_idx, filter_key='len_left'):
+    def process_and_plot(self, input_seqs, label_seqs, predicted_seqs, id_traj, thrown_object, filter_value, epoch_idx, filter_key='len_left', note=''):
         # convert all elements of input_seqs to numpy
         input_seqs = [inp.cpu().numpy() for inp in input_seqs]
 
@@ -251,10 +287,10 @@ class MetricGoalError(Metric):
             self.util_plotter.plot_line_chart(x_values = x_plot, y_values = [mean_errs], y_stds=[acc_stds], 
                                             x_tick_distance=5, 
                                             y_tick_distance=0.01,
-                                            font_size_title=25,
+                                            font_size_title=40,
                                             font_size_label=24,
                                             font_size_tick=20,
-                                            title=f'{thrown_object} - Impact point error - Trajectory #{id_traj} - EPOCH {epoch_idx}', 
+                                            title=f'{thrown_object} - Impact point error - Trajectory #{id_traj} - EPOCH {epoch_idx} - {note}', 
                                             x_label=label_x, 
                                             y_label=label_y,
                                             legends=None,

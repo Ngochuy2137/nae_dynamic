@@ -51,25 +51,24 @@ def main():
     # model_parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-2loss1_model/bottle-2loss1-model_02-01-2025_09-15-20_hiddensize128'
     
     ## ----------------- 3*loss1 -----------------\
-    thrown_object = 'bottle-3loss1'
-    model_parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/ACC-repair-bottle-3loss1_model/bottle-3loss1-model_02-01-2025_12-04-38_hiddensize128'
+    thrown_object = '3-5-2-bottle-1loss1-inlen-2-step_end-2-wc1e-4-more-layers-hidden-GRA-CLIP'
+    model_parent_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/models/3-5-2-bottle-1loss1-inlen-2-step_end-2-wc1e-4-more-layers-hidden-GRA-CLIP_model/ACC-repair-3-5-2-bottle-1loss1-inlen-2-step_end-2-wc1e-4-more-layers-hidden-GRA-CLIP-model_04-01-2025_01-16-27_hiddensize256'
 
 
-    wdb_run_id=None   # 't5nlloi0'
-    wdb_resume=None   # 'allow'
+    wdb_run_id='o5bn8asu'   # 't5nlloi0'
+    wdb_resume='allow'   # 'allow'
     enable_wandb = True
 
     # Training parameters 
     training_params = {
         'num_epochs': 12000,
         'batch_size_train': 512,    
-        'batch_size_val': 1024,
         'save_interval': 10,
         'thrown_object' : thrown_object,
-        'train_id': 'NEW METRIC',
+        'train_id': 'ACC-repair',
         'warmup_steps': 25,
         'dropout_rate': 0.0,
-        'loss1_weight': 2.0,
+        'loss1_weight': 1.0,
         'loss2_weight': 1.0,
         'loss2_1_weight': 0.0,
         'weight_decay': 0.0001,
@@ -77,11 +76,17 @@ def main():
     # Model parameters
     model_params = {
         'input_size': 9,
-        'hidden_size': 128,
+        'hidden_size': 256,
         'output_size': 9,
-        'num_layers_lstm': 2,
+        'num_layers_lstm': 3,
         'lr': 0.0001
     }
+    data_params = {
+        'data_step_start': 2,
+        'data_step_end': -2,
+        'data_increment': 1,
+    }
+
     wdb_notes = f'lr: {model_params["lr"]}, \
                 {training_params["loss2_weight"]}*L2: ,  \
                 {training_params["loss2_1_weight"]}*L2_1, \
@@ -89,7 +94,7 @@ def main():
                 dropout: {training_params["dropout_rate"]}, \
                 weight_decay: {training_params["weight_decay"]}'
 
-    nae = NAEDynamicLSTM(**model_params, **training_params, data_dir=data_dir, device=device)
+    nae = NAEDynamicLSTM(**model_params, **training_params, **data_params, data_dir=data_dir, device=device)
     # load data
     nae_data_loader = NAEDataLoader()
     data_train, data_val, data_test = nae_data_loader.load_train_val_test_dataset(data_dir)
@@ -109,6 +114,11 @@ def main():
     nae.util_printer.print_green('Start training ...', background=True)
     if enable_wandb:
         nae.init_wandb('nae-dynamic', run_id=wdb_run_id, resume=wdb_resume, wdb_notes=wdb_notes)
+
+        wandb.define_metric("custom_step")
+        wandb.define_metric("valid_loss_1", step_metric="custom_step", summary="min")
+        wandb.define_metric("valid_loss_2", step_metric="custom_step", summary="min")
+        wandb.define_metric("valid_loss_3", step_metric="custom_step", summary="min")
     
     # Load all models
     model_info = get_model_epochs_and_paths(model_parent_dir)
@@ -124,7 +134,7 @@ def main():
             raise ValueError('Cannot determine the epoch index')
         # 2. ----- FOR VALIDATION -----
         # logging.info(f"VALIDATION:")
-        mean_loss_total_val_log, \
+        mean_loss_total_log_val, mean_loss_1_log_val, mean_loss_2_log_val, mean_loss_3_log_val, \
         (mean_ade_entire,   std_ade_entire), \
         (mean_ade_future,   std_ade_future), \
         (mean_ade_past,     std_ade_past), \
@@ -137,65 +147,73 @@ def main():
         # input('Say hahaha')
         # 3. ----- FOR WANDB LOG -----
         if enable_wandb:
+            # total_training_time = time.time() - start_t
             wandb.log({
-                'valid_loss_total': mean_loss_total_val_log,
-            }, step=epoch_idx)
+                'custom_step':epoch_idx,
+                # 'valid_loss_total': mean_loss_total_log_val,
+                'valid_loss_1': mean_loss_1_log_val,
+                'valid_loss_2': mean_loss_2_log_val,
+                'valid_loss_3': mean_loss_3_log_val,
+            })
 
-            wandb.log({
-                'valid_mean_ade_entire': mean_ade_entire,
-                'valid_mean_ade_entire_min': mean_ade_entire - std_ade_entire,
-                'valid_mean_ade_entire_max': mean_ade_entire + std_ade_entire,
-            }, step=epoch_idx)
+            # wandb.log({
+            #     'valid_mean_ade_entire': mean_ade_entire,
+            #     'valid_mean_ade_entire_min': mean_ade_entire - std_ade_entire,
+            #     'valid_mean_ade_entire_max': mean_ade_entire + std_ade_entire,
+            # }, step=epoch_idx)
 
-            wandb.log({
-                'valid_mean_ade_future': mean_ade_future,
-                'valid_mean_ade_future_min': mean_ade_future - std_ade_future,
-                'valid_mean_ade_future_max': mean_ade_future + std_ade_future,
-            }, step=epoch_idx)
+            # wandb.log({
+            #     'valid_mean_ade_future': mean_ade_future,
+            #     'valid_mean_ade_future_min': mean_ade_future - std_ade_future,
+            #     'valid_mean_ade_future_max': mean_ade_future + std_ade_future,
+            # }, step=epoch_idx)
 
-            wandb.log({
-                'valid_mean_ade_past': mean_ade_past,
-                'valid_mean_ade_past_min': mean_ade_past - std_ade_past,
-                'valid_mean_ade_past_max': mean_ade_past + std_ade_past,
-            }, step=epoch_idx)
+            # wandb.log({
+            #     'valid_mean_ade_past': mean_ade_past,
+            #     'valid_mean_ade_past_min': mean_ade_past - std_ade_past,
+            #     'valid_mean_ade_past_max': mean_ade_past + std_ade_past,
+            # }, step=epoch_idx)
 
-            wandb.log({
-                'valid_mean_nade_entire': mean_nade_entire,
-                'valid_mean_nade_entire_min': mean_nade_entire - std_nade_entire,
-                'valid_mean_nade_entire_max': mean_nade_entire + std_nade_entire,
-            }, step=epoch_idx)
+            # wandb.log({
+            #     'valid_mean_nade_entire': mean_nade_entire,
+            #     'valid_mean_nade_entire_min': mean_nade_entire - std_nade_entire,
+            #     'valid_mean_nade_entire_max': mean_nade_entire + std_nade_entire,
+            # }, step=epoch_idx)
 
-            wandb.log({
-                'valid_mean_nade_future': mean_nade_future,
-                'valid_mean_nade_future_min': mean_nade_future - std_nade_future,
-                'valid_mean_nade_future_max': mean_nade_future + std_nade_future,
-            }, step=epoch_idx)
+            # wandb.log({
+            #     'valid_mean_nade_future': mean_nade_future,
+            #     'valid_mean_nade_future_min': mean_nade_future - std_nade_future,
+            #     'valid_mean_nade_future_max': mean_nade_future + std_nade_future,
+            # }, step=epoch_idx)
 
-            wandb.log({
-                'valid_mean_nade_past': mean_nade_past,
-                'valid_mean_nade_past_min': mean_nade_past - std_nade_past,
-                'valid_mean_nade_past_max': mean_nade_past + std_nade_past,
-            }, step=epoch_idx)
+            # wandb.log({
+            #     'valid_mean_nade_past': mean_nade_past,
+            #     'valid_mean_nade_past_min': mean_nade_past - std_nade_past,
+            #     'valid_mean_nade_past_max': mean_nade_past + std_nade_past,
+            # }, step=epoch_idx)
 
-            wandb.log({
-                "valid_mean_IE_err": mean_fe,
-                "valide_mean_IE_min": mean_fe - std_fe,
-                "valid_mean_IE_max": mean_fe + std_fe,
-            }, step=epoch_idx)
+            # wandb.log({
+            #     "valid_mean_IE_err": mean_fe,
+            #     "valide_mean_IE_min": mean_fe - std_fe,
+            #     "valid_mean_IE_max": mean_fe + std_fe,
+            # }, step=epoch_idx)
 
-            for cap_rate_data in capture_success_rates:
-                cap_thr = cap_rate_data[0]
-                cap_rate = cap_rate_data[1]
-                cap_std = cap_rate_data[2]
-                wandb.log({
-                    f"valid_capture_success_rate_{cap_thr}": cap_rate,
-                    f"valid_capture_success_rate_{cap_thr}_min": cap_rate - cap_std,
-                    f"valid_capture_success_rate_{cap_thr}_max": cap_rate + cap_std,
-                }, step=epoch_idx)
+            # for cap_rate_data in capture_success_rates:
+            #     cap_thr = cap_rate_data[0]
+            #     cap_rate = cap_rate_data[1]
+            #     cap_std = cap_rate_data[2]
+            #     wandb.log({
+            #         f"valid_capture_success_rate_{cap_thr}": cap_rate,
+            #         f"valid_capture_success_rate_{cap_thr}_min": cap_rate - cap_std,
+            #         f"valid_capture_success_rate_{cap_thr}_max": cap_rate + cap_std,
+            #     }, step=epoch_idx)
 
-            wandb.log({
-                'converge_to_final_point_trending': converge_to_final_point_trending,
-            }, step=epoch_idx)
+            # wandb.log({
+            #     'converge_to_final_point_trending': converge_to_final_point_trending,
+            #     'training speed (s/epoch)': time_total_epoch,
+            #     'training_time_mins': total_training_time/60,
+            #     'learning_rate': self.optimizer.param_groups[0]["lr"],
+            # }, step=epoch_idx)
 
 
 if __name__ == '__main__':

@@ -12,6 +12,7 @@ from tqdm import tqdm
 from collections import defaultdict
 import copy
 import random
+import torch
 
 from nae_core.utils.submodules.preprocess_utils.data_raw_reader import RoCatDataRawReader
 
@@ -29,21 +30,21 @@ class DataNormalizer:
             raise ValueError("Bạn cần cung cấp scaler_path hoặc range_norm.")
         self.range_norm = range_norm
 
-    def normalize_data(self, data, object_name):
+    def normalize_data(self, data, object_name, note):
         if self.scaler is None:
             raise ValueError("Scaler chưa được khởi tạo.")
         data_normed = self.scaler.fit_transform(data)
         save_scaler = input('Do you want to save the scaler? (y/n): ')
         if save_scaler == 'y':
-            self.save_scaler(object_name)
+            self.save_scaler(object_name, note)
         return data_normed
     
-    def denormalize_data(self, data_normalized):
-        if self.scaler is None:
-            raise ValueError("Scaler chưa được khởi tạo.")
-        return self.scaler.inverse_transform(data_normalized)
+    # def denormalize_data(self, data_normalized):
+    #     if self.scaler is None:
+    #         raise ValueError("Scaler chưa được khởi tạo.")
+    #     return self.scaler.inverse_transform(data_normalized)
 
-    def save_scaler(self, object_name):
+    def save_scaler(self, object_name, note):
         # get current path
         current_path = os.path.dirname(os.path.realpath(__file__))
         # get parent path
@@ -53,7 +54,7 @@ class DataNormalizer:
         if not os.path.exists(parent_path):
             os.makedirs(parent_path)
         # save new data
-        scaler_path = os.path.join(parent_path, 'scaler.save')
+        scaler_path = os.path.join(parent_path, f'{note}_scaler.save')
         if self.scaler is None:
             raise ValueError("Scaler chưa được khởi tạo.")
         joblib.dump(self.scaler, scaler_path)
@@ -62,10 +63,103 @@ class DataNormalizer:
     def load_scaler(self, path):
         self.scaler = joblib.load(path)
 
+class DataDenormalizer():
+    def __init__(self, pos_scaler_path, vel_scaler_path, acc_scaler_path):
+        self.denormalize_load_scaler(pos_scaler_path, vel_scaler_path, acc_scaler_path)
+
+    def denormalize_load_scaler(self, pos_scaler_path=None, vel_scaler_path=None, acc_scaler_path=None):
+        """
+        Load MinMaxScaler parameters for position, velocity, and acceleration, and prepare tensors for GPU.
+        """
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Load scalers
+        pos_scaler = joblib.load(pos_scaler_path) if pos_scaler_path else None
+        vel_scaler = joblib.load(vel_scaler_path) if vel_scaler_path else None
+        acc_scaler = joblib.load(acc_scaler_path) if acc_scaler_path else None
+
+        # Handle position scaler
+        if pos_scaler:
+            self.min_pos = torch.tensor(pos_scaler.data_min_, device=device).view(1, 1, -1)
+            self.max_pos = torch.tensor(pos_scaler.data_max_, device=device).view(1, 1, -1)
+            print("Position MinMaxScaler parameters loaded.")
+
+        # Handle velocity scaler
+        if vel_scaler:
+            self.min_vel = torch.tensor(vel_scaler.data_min_, device=device).view(1, 1, -1)
+            self.max_vel = torch.tensor(vel_scaler.data_max_, device=device).view(1, 1, -1)
+            print("Velocity MinMaxScaler parameters loaded.")
+
+        # Handle acceleration scaler
+        if acc_scaler:
+            self.min_acc = torch.tensor(acc_scaler.data_min_, device=device).view(1, 1, -1)
+            self.max_acc = torch.tensor(acc_scaler.data_max_, device=device).view(1, 1, -1)
+            print("Acceleration MinMaxScaler parameters loaded.")
+
+    def denormalize_data_on_cuda(self, data, denorm_pos=True, denorm_vel=True, denorm_acc=True):
+        """
+        Denormalize position, velocity, and acceleration data using preloaded tensors.
+        Args:
+            data (torch.Tensor): Normalized data (shape: [batch_size, time_steps, feature]).
+            denorm_pos (bool): If True, denormalize position data.
+            denorm_vel (bool): If True, denormalize velocity data.
+            denorm_acc (bool): If True, denormalize acceleration data.
+        Returns:
+            torch.Tensor: Denormalized data (shape: [batch_size, time_steps, feature]).
+        """
+        denormalized_data = data.clone()  # Clone the input tensor to avoid modifying it directly
+
+        # Denormalize position (x, y, z)
+        if denorm_pos:
+            print("Denormalizing position data...")
+            denormalized_data[:, :, 0:3] = denormalized_data[:, :, 0:3] * (self.max_pos - self.min_pos) + self.min_pos
+
+        # Denormalize velocity (vx, vy, vz)
+        if denorm_vel:
+            print("Denormalizing velocity data...")
+            denormalized_data[:, :, 3:6] = denormalized_data[:, :, 3:6] * (self.max_vel - self.min_vel) + self.min_vel
+
+        # Denormalize acceleration (ax, ay, az)
+        if denorm_acc:
+            print("Denormalizing acceleration data...")
+            denormalized_data[:, :, 6:9] = denormalized_data[:, :, 6:9] * (self.max_acc - self.min_acc) + self.min_acc
+
+        return denormalized_data
+    
+    def denormalize_data_all_feature_on_cuda(self, data):
+        """
+        Denormalize position, velocity, and acceleration data using preloaded tensors.
+        Args:
+            data (torch.Tensor): Normalized data (shape: [batch_size, time_steps, feature]).
+            denorm_pos (bool): If True, denormalize position data.
+            denorm_vel (bool): If True, denormalize velocity data.
+            denorm_acc (bool): If True, denormalize acceleration data.
+        Returns:
+            torch.Tensor: Denormalized data (shape: [batch_size, time_steps, feature]).
+        """
+        denormalized_data = data.clone()  # Clone the input tensor to avoid modifying it directly
+
+        # Denormalize position (x, y, z)
+        print("Denormalizing position data...")
+        denormalized_data[:, :, 0:3] = denormalized_data[:, :, 0:3] * (self.max_pos - self.min_pos) + self.min_pos
+
+        # Denormalize velocity (vx, vy, vz)
+        print("Denormalizing velocity data...")
+        denormalized_data[:, :, 3:6] = denormalized_data[:, :, 3:6] * (self.max_vel - self.min_vel) + self.min_vel
+
+        # Denormalize acceleration (ax, ay, az)
+        print("Denormalizing acceleration data...")
+        denormalized_data[:, :, 6:9] = denormalized_data[:, :, 6:9] * (self.max_acc - self.min_acc) + self.min_acc
+
+        return denormalized_data
+
 class DataPreprocess(DataNormalizer):
-    def __init__(self, scaler_path=None, range_norm=(-0.5, 0.5)):
+    def __init__(self, scaler_path=None, range_norm=(-0.5, 0.5), norm_pos=True, norm_vel=True, norm_acc=True):
         # Gọi hàm khởi tạo của class cha
         super().__init__(scaler_path, range_norm)
+        self.norm_pos = norm_pos
+        self.norm_vel = norm_vel
+        self.norm_acc = norm_acc
 
     def vel_interpolation(self, x_arr, t_arr, method='spline-k3-s0'):
         '''
@@ -482,7 +576,7 @@ class DataPreprocess(DataNormalizer):
             global_util_printer.print_yellow(f'Number of treated trajectories: {len(traj_idxs_with_noise_treatment)}/{len(data_raw)} : {traj_idxs_with_noise_treatment}')
             for bad_idx, noisy_idxs in outlier_trajectories.items():
                 global_util_printer.print_red('The following trajectories cannot be cleaned:')
-                print(f'    Trajectory: {bad_idx}: {noisy_idxs} / {len(data_raw[bad_idx]["position"])}')
+                print(f'    Trajectory: {bad_idx}: {noisy_idxs} / {len(data_raw[bad_idx]["original"]["position"])}')
                 if plot_outlier:
                     self.plot_traj(data_raw[bad_idx], title=f'Trajectory {bad_idx}', traj_type='raw')  # plot raw trajectory
                     # plot acceleration
@@ -527,7 +621,13 @@ class DataPreprocess(DataNormalizer):
     def plot_acc(self, data, note=''):
         acc = data['preprocess']['model_data'][:, 6:]
         global_util_plotter.plot_line_chart(y_values=[acc[:, 0], acc[:, 1], acc[:, 2]], title=f'Acceleration - {note}', x_label='Frames', y_label='Acceleration m/s\u00b2', legends=['acc_x', 'acc_y', 'acc_z'])
-    
+    def plot_vel(self, data, note=''):
+        vel = data['preprocess']['model_data'][:, 3:6]
+        global_util_plotter.plot_line_chart(y_values=[vel[:, 0], vel[:, 1], vel[:, 2]], title=f'Velocity - {note}', x_label='Frames', y_label='Velocity m/s', legends=['vel_x', 'vel_y', 'vel_z'])
+    def plot_pos(self, data, note=''):
+        pos = data['preprocess']['model_data'][:, :3]
+        global_util_plotter.plot_line_chart(y_values=[pos[:, 0], pos[:, 1], pos[:, 2]], title=f'Position - {note}', x_label='Frames', y_label='Position m', legends=['pos_x', 'pos_y', 'pos_z'])
+
     def backup_data(self, data, object_name):
         '''
         save original data to 'original' field
@@ -560,8 +660,8 @@ class DataPreprocess(DataNormalizer):
             print(f"  {prefix}{key}")  # In key hiện tại
             self.inspect_dict_structure(d[key], prefix=f"{prefix}{key}.")  # Gọi đệ quy cho keys con
 
-    def normalize_acc_data(self, data, object_name, debug=False):
-        global_util_printer.print_blue('\n- Normalizing acceleration', background=True)
+    def normalize_data_features(self, data, object_name, debug=False):
+        global_util_printer.print_blue('\n- Normalizing data (pos, vel, acc)', background=True)
         # Check data before normalization
         for idx, traj in enumerate(data):
             if 'model_data' not in traj['preprocess']:
@@ -569,41 +669,60 @@ class DataPreprocess(DataNormalizer):
             if traj['preprocess']['model_data'].shape[1] != 9:
                 raise ValueError(f"Trajectory {idx} has fewer than 9 features: {traj['preprocess']['model_data'].shape}")
 
-        # Ghi nhớ số điểm trong từng quỹ đạo
+        # Remember the number of points in each trajectory
         len_list = [len(traj['preprocess']['model_data']) for traj in data]
-        acc_data_no_norm = [traj['preprocess']['model_data'][:, 6:].copy() for traj in data]    # need to copy, unless, acc_data_no_norm is only view of data and it will be changed in the next steps
-        acc_flatten = np.vstack(acc_data_no_norm)  # Gộp acc của toàn bộ quỹ đạo thành 1 mảng 2D
-        acc_flatten_normed_flatten = self.normalize_data(acc_flatten, object_name)    # Normalize each column (x, y, z) independently
-        
-        # Tách lại dữ liệu thành danh sách các quỹ đạo
-        start_idx = 0
-        for idx, length in enumerate(len_list):
-            if data[idx]['preprocess']['model_data'][:, 6:].shape != acc_flatten_normed_flatten[start_idx:start_idx + length].shape:
-                raise ValueError(f"Mismatch in shapes for trajectory {idx}")
-            data[idx]['preprocess']['model_data'][:, 6:] = acc_flatten_normed_flatten[start_idx:start_idx + length]
-            start_idx += length
 
-        # check correction after normalization
+        # Prepare to normalize position, velocity, and acceleration separately
+        for norm_type, start_idx, end_idx, should_normalize in [
+            ("position", 0, 3, self.norm_pos),
+            ("velocity", 3, 6, self.norm_vel),
+            ("acceleration", 6, 9, self.norm_acc),
+        ]:
+            if should_normalize:
+                global_util_printer.print_blue(f"- Normalizing {norm_type}", background=True)
+                # Extract the data to normalize
+                feature_data_no_norm = [traj['preprocess']['model_data'][:, start_idx:end_idx].copy() for traj in data]
+                feature_flatten = np.vstack(feature_data_no_norm)  # Flatten the data into a 2D array
+                feature_flatten_normed_flatten = self.normalize_data(feature_flatten, object_name, note=norm_type)  # Normalize each column independently
+                
+                # Restore the data back into individual trajectories
+                start = 0
+                for idx, length in enumerate(len_list):
+                    if data[idx]['preprocess']['model_data'][:, start_idx:end_idx].shape != feature_flatten_normed_flatten[start:start + length].shape:
+                        raise ValueError(f"Mismatch in shapes for trajectory {idx} during {norm_type} normalization")
+                    data[idx]['preprocess']['model_data'][:, start_idx:end_idx] = feature_flatten_normed_flatten[start:start + length]
+                    start += length
+
+        # Verify the correction after normalization
         for i in range(len(data)):
-            if len(data[i]['preprocess']['model_data']) != len(acc_data_no_norm[i]):
+            if len(data[i]['preprocess']['model_data']) != len_list[i]:
                 raise ValueError(f"Mismatch in shapes for trajectory {i} after normalization")
         
+        # Debugging: Plot data before and after normalization
         if debug:
-            # Plot before and after normalization
-            # check right len:
-            idx_rand = 0
-            # Before normalization
-            acc_x_no_norm = acc_data_no_norm[idx_rand][:, 0]
-            acc_y_no_norm = acc_data_no_norm[idx_rand][:, 1]
-            acc_z_no_norm = acc_data_no_norm[idx_rand][:, 2]
-            global_util_plotter.plot_line_chart(y_values=[acc_x_no_norm, acc_y_no_norm, acc_z_no_norm], title=f'Acceleration - Before normalization - trajectory {idx_rand}', legends=['acc_x', 'acc_y', 'acc_z'])
+            idx_rand = 0  # Choose a random trajectory for visualization
+            traj_rand = data[idx_rand]
             
-            # After normalization
-            traj_ran = data[idx_rand]
-            acc_x_norm = traj_ran['preprocess']['model_data'][:, 6]
-            acc_y_norm = traj_ran['preprocess']['model_data'][:, 7]
-            acc_z_norm = traj_ran['preprocess']['model_data'][:, 8]
-            global_util_plotter.plot_line_chart(y_values=[acc_x_norm, acc_y_norm, acc_z_norm], title=f'Acceleration - After normalization - trajectory {idx_rand}', legends=['acc_x', 'acc_y', 'acc_z'])
+            for norm_type, start_idx, end_idx, should_normalize in [
+                ("position", 0, 3, self.norm_pos),
+                ("velocity", 3, 6, self.norm_vel),
+                ("acceleration", 6, 9, self.norm_acc),
+            ]:
+                if should_normalize:
+                    # Before normalization
+                    feature_no_norm = traj_rand['preprocess']['model_data'][:, start_idx:end_idx].copy()
+                    global_util_plotter.plot_line_chart(
+                        y_values=[feature_no_norm[:, i] for i in range(feature_no_norm.shape[1])],
+                        title=f'{norm_type.capitalize()} - Before normalization - trajectory {idx_rand}',
+                        legends=[f'{norm_type}_dim_{i}' for i in range(feature_no_norm.shape[1])]
+                    )
+                    # After normalization
+                    feature_norm = traj_rand['preprocess']['model_data'][:, start_idx:end_idx]
+                    global_util_plotter.plot_line_chart(
+                        y_values=[feature_norm[:, i] for i in range(feature_norm.shape[1])],
+                        title=f'{norm_type.capitalize()} - After normalization - trajectory {idx_rand}',
+                        legends=[f'{norm_type}_dim_{i}' for i in range(feature_norm.shape[1])]
+                    )
 
         return data
     
@@ -627,13 +746,21 @@ class DataPreprocess(DataNormalizer):
 
 
 def main():
-    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bamboo_168'
-    object_name = 'Bamboo'
+    # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bamboo_168'
+    # object_name = 'Bamboo'
+
+    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bottle_115'
+    object_name = 'Bottle'
+
     data_raw = RoCatDataRawReader(data_dir).read()
     FS = 120 # Sampling frequency
     CUTOFF = 25 # Cutoff frequency
     CUBIC_SPLINE = 'spline-k3-s0'
-    data_preprocess = DataPreprocess()
+    RANGE_NORM = (-1, 1)
+    NORM_POS = True
+    NORM_VEL = True
+    NORM_ACC = True
+    data_preprocess = DataPreprocess(range_norm=RANGE_NORM, norm_pos=NORM_POS, norm_vel=NORM_VEL, norm_acc=NORM_ACC)
     s_value, k_value = data_preprocess.get_s_k_values_from_string(CUBIC_SPLINE)
     print(f"Found SPLINE configure: s: {s_value}, k: {k_value}")
 
@@ -657,7 +784,7 @@ def main():
     # ------------------------------------------------------------
     # 3. Filter out outlier trajectories with outlier acceleration
     # ------------------------------------------------------------
-    cleaned_data, outlier_trajectories, traj_idxs_with_noise_treatment = data_preprocess.detect_acc_outlier(data_pp, acc_threshold=(-30, 30), gap_threshold=3, edge_margin=25, min_len_threshold=65, plot_outlier=False, debug=False)
+    cleaned_data, outlier_trajectories, traj_idxs_with_noise_treatment = data_preprocess.detect_acc_outlier(data_pp, acc_threshold=(-30, 30), gap_threshold=3, edge_margin=25, min_len_threshold=80, plot_outlier=True, debug=True)
     global_util_printer.print_yellow(f'Number of outlier trajectories: {len(outlier_trajectories)}')
     data_pp = cleaned_data
     input('Done filtering outlier trajectories. Press Enter to continue...')
@@ -666,8 +793,17 @@ def main():
     # ----------------------------------------
     # 4. Normalize acceleration on all dataset
     # ----------------------------------------
-    data_pp = data_preprocess.normalize_acc_data(data_pp, object_name, debug=False)
+    data_pp = data_preprocess.normalize_data_features(data_pp, object_name, debug=False)
     input('Done normalizing acceleration. Press Enter to continue...')
+
+    # # plot acc
+    # data_preprocess.plot_acc(data_pp[0], note='Trajectory 0 - After normalization'); input()
+    # # plot vel
+    # data_preprocess.plot_vel(data_pp[0], note='Trajectory 0 - After normalization'); input()
+    # # plot pos
+    # data_preprocess.plot_pos(data_pp[0], note='Trajectory 0 - After normalization'); input()
+
+    # input('ENTER to continue...')
     # # plot acc
     # data_preprocess.plot_acc(data_pp[0], note='Trajectory 0 - After normalization'); input()
 

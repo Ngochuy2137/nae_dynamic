@@ -25,6 +25,7 @@ from nae_core.utils.submodules.preprocess_utils.data_splitter import RoCatDataSp
 from python_utils.plotter import Plotter
 from python_utils.printer import Printer
 from scipy.interpolate import UnivariateSpline, CubicSpline
+from scipy.signal import butter, filtfilt
 
 global_util_plotter = Plotter()
 global_util_printer = Printer()
@@ -197,6 +198,14 @@ class DataFormater:
                     acc[i] = 2 * (vel_arr[i + 1] - vel_arr[i]) / (dt2 * (dt1 + dt2)) - \
                             2 * (vel_arr[i] - vel_arr[i - 1]) / (dt1 * (dt1 + dt2))
         return acc
+
+    # Hàm áp dụng Butterworth filter
+    def apply_butterworth_for_axis(self, data, cutoff, fs, order=4):
+        nyquist = 0.5 * fs  # Tần số Nyquist
+        normal_cutoff = cutoff / nyquist  # Tần số cắt chuẩn hóa
+        b, a = butter(order, normal_cutoff, btype='low', analog=False)  # Tạo bộ lọc
+        filtered_data = filtfilt(b, a, data)  # Lọc tín hiệu
+        return filtered_data
     
     def save_info_txt(self, ):
         pass

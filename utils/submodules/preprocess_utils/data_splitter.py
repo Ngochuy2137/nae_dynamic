@@ -1,6 +1,9 @@
 import numpy as np
 import os
 from .data_raw_reader import RoCatRLLabDataRawReader
+from python_utils.printer import Printer
+
+global_util_printer = Printer()
 
 class RoCatDataSplitter:
     def __init__(self, data_raw, train_ratio=0.8, val_ratio=0.1, num_first_points_to_cut=0, object_name=None):
@@ -45,7 +48,7 @@ class RoCatDataSplitter:
         # np.savez(os.path.join(self.output_data_dir, f'data_train_{len(self.data_train)}.npz'), data=self.data_train)
         # np.savez(os.path.join(self.output_data_dir, f'data_val_{len(self.data_val)}.npz'), data=self.data_val)
         # np.savez(os.path.join(self.output_data_dir, f'data_test_{len(self.data_test)}.npz'), data=self.data_test)
-        print(f'Saved train, val, test data to {self.output_data_dir}')
+        global_util_printer.print_green(f'Saved train, val, test data to {self.output_data_dir}')
 
         return self.data_train, self.data_val, self.data_test
 

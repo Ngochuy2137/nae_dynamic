@@ -1,0 +1,10 @@
+----- Data format info -----
+Object name: bamboo
+Original data path: /home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bamboo_168
+  vel_interpolation_method: manual
+  acc_interpolation_method: linear
+   Data raw:
+      Trajectories: 168
+   Data new:
+      Trajectories: 168
+-------------------------------------

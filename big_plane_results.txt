@@ -1,0 +1,55 @@
+1st LOOP: 
+    big_plane_acc_err:
+    MAX:    14.256027027920727
+    MIN:    1.3053133779195474
+    MEAN:   4.701107158969218
+1st LOOP: 
+    big_plane_acc_err:
+    MAX:    14.256027027920727
+    MIN:    1.3053133779195474
+    MEAN:   4.701107158969218
+1st LOOP: 
+    big_plane_acc_err:
+    MAX:    14.256027027920727
+    MIN:    1.3053133779195474
+    MEAN:   4.701107158969218
+1st LOOP: 
+    big_plane_acc_err:
+    MAX:    14.256027027920727
+    MIN:    1.3053133779195474
+    MEAN:   4.701107158969218
+1st LOOP: 
+    big_plane_acc_err:
+    MAX:    14.256027027920727
+    MIN:    1.3053133779195474
+    MEAN:   4.701107158969218
+1st LOOP: 
+    big_plane_acc_err:
+    MAX:    14.256027027920727
+    MIN:    1.3053133779195474
+    MEAN:   4.701107158969218
+1st LOOP: 
+    big_plane_acc_err:
+    MAX:    14.256027027920727
+    MIN:    1.3053133779195474
+    MEAN:   4.701107158969218
+1st LOOP: 
+    big_plane_acc_err:
+    MAX:    14.256027027920727
+    MIN:    1.3053133779195474
+    MEAN:   4.701107158969218
+1st LOOP: 
+    big_plane_acc_err:
+    MAX:    14.256027027920727
+    MIN:    1.3053133779195474
+    MEAN:   4.701107158969218
+1st LOOP: 
+    big_plane_acc_err:
+    MAX:    14.256027027920727
+    MIN:    1.3053133779195474
+    MEAN:   4.701107158969218
+1st LOOP: 
+    big_plane_acc_err:
+    MAX:    14.256027027920727
+    MIN:    1.3053133779195474
+    MEAN:   4.701107158969218

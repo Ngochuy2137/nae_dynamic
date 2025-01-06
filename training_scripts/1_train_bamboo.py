@@ -10,7 +10,7 @@ def main():
     np.random.seed(seed)
     random.seed(seed)
 
-    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_prediction_ws/src/nae/data/nae_paper_dataset/new_data_format/bamboo/split/bamboo'
+    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/data_preprocessed/Bamboo'
     thrown_object = 'bamboo'
     
     checkout_path = None
@@ -24,7 +24,7 @@ def main():
         'batch_size_train': 512,    
         'batch_size_val': 1024,
         'save_interval': 10,
-        'thrown_object' : 'Done-Finetune-' + thrown_object,
+        'thrown_object' : 'ACC-repair-' + thrown_object,
         'train_id': f'{thrown_object}',
         'warmup_steps': 25,
         'dropout_rate': 0.0,
@@ -50,10 +50,8 @@ def main():
     nae = NAEDynamicLSTM(**model_params, **training_params, data_dir=data_dir, device=device)
     # load data
     nae_data_loader = NAEDataLoader()
-    data_train, data_val, data_test = nae_data_loader.load_dataset(data_dir)
-    if not nae.data_correction_check(data_train, data_val, data_test):
-        return
-    
+    data_train, data_val, data_test = nae_data_loader.load_train_val_test_dataset(data_dir)
+
     # prepare data for training
     input_label_generator = InputLabelGenerator()
     data_train = input_label_generator.generate_input_label_dynamic_seqs(data_train, step_start=5, step_end=-3, increment=1, shuffle=True)

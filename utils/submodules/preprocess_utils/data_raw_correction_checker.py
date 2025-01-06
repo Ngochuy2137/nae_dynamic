@@ -57,55 +57,19 @@ class RoCatRLDataRawCorrectionChecker:
             print('     - Point:        ', data[i]['points'][point_random_idx])
             # print('     - Orientation:  ', data[i]['orientations'][point_random_idx])
             print('     - Timestamp:    ', data[i]['time_stamps'][point_random_idx])
-
-            data_i = data[i]['points']
-            result_feature_check, msg = self.check_feature_correction(data_i, data_whose_y_up)
-            if not result_feature_check:
-                # print in red
-                self.util_printer.print_red(f'[FEATURE CHECK] Trajectory {i} has incorrect data')
-                print('     ', msg)
-                is_incorrect_data = True
-                input('Press Enter to continue...')
-            # print in green
-            self.util_printer.print_green(f'[FEATURE CHECK]             Trajectory {i} has correct data')
         
-            if not self.check_velocity_correction(data[i]):
-                print(f'\033[91m[VEL INTERPOLATION CHECK] Trajectory {i} has incorrect data')
+            if not self.check_velocity_acceleration_correction(data[i]):
+                print(f'\033[91m[VEL-ACC INTERPOLATION CHECK] Trajectory {i} has incorrect data')
                 is_incorrect_data = True
                 input('Press Enter to continue...')
             # print in green
-            self.util_printer.print_green(f'[VEL INTERPOLATION CHECK]   Trajectory {i} has correct data')
+            self.util_printer.print_green(f'[VEL-ACC INTERPOLATION CHECK]   Trajectory {i} has correct data')
         if not is_incorrect_data:
             self.util_printer.print_green('-----> All data is correct')
         else:
             self.util_printer.print_red('-----> There are incorrect data')
-            
-    def check_feature_correction(self, one_trajectory, data_whose_y_up=False):
-        '''
-        The old data format is:
-            - Swap y, z
-            - Swap vy, vz
-            - Data point: x, y, z, vx, vy, vz, 0, 0, 9.81
-
-        The new data format is:
-            - Keep y, z, no swap anymore => need to:
-                + Swap y, z
-                + Swap vy, vz
-            - Data point: x, y, z, vx, vy, vz, 0, -9.81, 0
-        '''
-        for point in one_trajectory:
-            if data_whose_y_up:
-                is_feature_7_right = abs(point[7] + 9.81) < 1e-5
-                is_feature_8_right = abs(point[8]) < 1e-5
-            else:
-                is_feature_7_right = abs(point[7]) < 1e-5
-                is_feature_8_right = abs(point[8] - 9.81) < 1e-5
-            if not is_feature_7_right or not is_feature_8_right:
-                msg = point
-                return False, msg
-        return True, ''
     
-    def check_velocity_correction(self, one_trajectory):
+    def check_velocity_acceleration_correction(self, one_trajectory):
         """
         Kiểm tra xem nội suy vận tốc có đúng không.
         The proper velocities vx, vy, vz should follow: 
@@ -126,6 +90,11 @@ class RoCatRLDataRawCorrectionChecker:
                 vx_expected = (next_point[0] - point[0]) / dt
                 vy_expected = (next_point[1] - point[1]) / dt
                 vz_expected = (next_point[2] - point[2]) / dt
+
+                ax_expected = (next_point[3] - point[3]) / dt
+                ay_expected = (next_point[4] - point[4]) / dt
+                az_expected = (next_point[5] - point[5]) / dt
+
             elif i == traj_len - 1:
                 # Backward difference
                 prev_point = one_trajectory['points'][i - 1]
@@ -135,6 +104,11 @@ class RoCatRLDataRawCorrectionChecker:
                 vx_expected = (point[0] - prev_point[0]) / dt
                 vy_expected = (point[1] - prev_point[1]) / dt
                 vz_expected = (point[2] - prev_point[2]) / dt
+
+                ax_expected = (point[3] - prev_point[3]) / dt
+                ay_expected = (point[4] - prev_point[4]) / dt
+                az_expected = (point[5] - prev_point[5]) / dt
+
             else:
                 # Central difference
                 prev_point = one_trajectory['points'][i - 1]
@@ -147,37 +121,52 @@ class RoCatRLDataRawCorrectionChecker:
                 vy_expected = (next_point[1] - prev_point[1]) / dt
                 vz_expected = (next_point[2] - prev_point[2]) / dt
 
+                ax_expected = (next_point[3] - prev_point[3]) / dt
+                ay_expected = (next_point[4] - prev_point[4]) / dt
+                az_expected = (next_point[5] - prev_point[5]) / dt
+
             # Lấy vận tốc thực tế từ dữ liệu
             vx, vy, vz = point[3], point[4], point[5]
+            ax, ay, az = point[6], point[7], point[8]
 
             # Kiểm tra nếu vận tốc khớp với sai số cho phép
             tolerance = 1e-5
-            result = abs(vx - vx_expected) < tolerance and \
+            result_vel = abs(vx - vx_expected) < tolerance and \
                     abs(vy - vy_expected) < tolerance and \
                     abs(vz - vz_expected) < tolerance
-            if not result:
-                print(f'\033[91m[VEL INTERPOLATION CHECK] Point {i} has incorrect velocity')
-                print(f'Expected: vx = {vx_expected}, vy = {vy_expected}, vz = {vz_expected}')
+            result_acc = abs(ax - ax_expected) < tolerance and \
+                        abs(ay - ay_expected) < tolerance and \
+                        abs(az - az_expected) < tolerance
+
+
+            if not result_vel or not result_acc:
+                if not result_vel:
+                    print(f'\033[91m[VEL-ACC INTERPOLATION CHECK] Point {i} has incorrect velocity')
+                    print(f'Expected: vx = {vx_expected}, vy = {vy_expected}, vz = {vz_expected}')
+                if not result_acc:
+                    print(f'\033[91m[VEL-ACC INTERPOLATION CHECK] Point {i} has incorrect acceleration')
+                    print(f'Expected: ax = {ax_expected}, ay = {ay_expected}, az = {az_expected}')
+
                 if i == 0:
                     print('Forward difference')
-                    print('     ', one_trajectory['points'][i][:6])
-                    print('         ', one_trajectory['time_stamps'][i])
-                    print('     ', one_trajectory['points'][i + 1][:6])
-                    print('         ', one_trajectory['time_stamps'][i + 1])
+                    print('     ', one_trajectory['points'][i])
+                    print('         time_stamps: ', one_trajectory['time_stamps'][i])
+                    print('     ', one_trajectory['points'][i + 1])
+                    print('         time_stamps: ', one_trajectory['time_stamps'][i + 1])
                 elif i == traj_len - 1:
                     print('Backward difference')
-                    print('     ', one_trajectory['points'][i - 1][:6])
-                    print('         ', one_trajectory['time_stamps'][i - 1])
-                    print('     ', one_trajectory['points'][i][:6])
-                    print('         ', one_trajectory['time_stamps'][i])
+                    print('     ', one_trajectory['points'][i - 1])
+                    print('         time_stamps: ', one_trajectory['time_stamps'][i - 1])
+                    print('     ', one_trajectory['points'][i])
+                    print('         time_stamps: ', one_trajectory['time_stamps'][i])
                 else:
                     print('Central difference')
-                    print('     ', one_trajectory['points'][i - 1][:6])
-                    print('         ', one_trajectory['time_stamps'][i-1])
-                    print('     ', one_trajectory['points'][i][:6])
-                    print('         ', one_trajectory['time_stamps'][i])
-                    print('     ', one_trajectory['points'][i + 1][:6])
-                    print('         ', one_trajectory['time_stamps'][i + 1])
+                    print('     ', one_trajectory['points'][i - 1])
+                    print('         time_stamps: ', one_trajectory['time_stamps'][i-1])
+                    print('     ', one_trajectory['points'][i])
+                    print('         time_stamps: ', one_trajectory['time_stamps'][i])
+                    print('     ', one_trajectory['points'][i + 1])
+                    print('         time_stamps: ', one_trajectory['time_stamps'][i + 1])
                 input()
             #print in green
             if i == 0:
@@ -186,7 +175,7 @@ class RoCatRLDataRawCorrectionChecker:
                 cal_way = 'Backward difference'
             else:
                 cal_way = 'Central difference'
-            self.util_printer.print_green(f'[VEL INTERPOLATION CHECK] pass - {cal_way}', enable=DEBUG)
+            self.util_printer.print_green(f'[VEL-ACC INTERPOLATION CHECK] pass - {cal_way}', enable=DEBUG)
         return result
                 
 # main

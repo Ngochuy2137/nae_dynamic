@@ -20,6 +20,9 @@ from python_utils.plotter import Plotter
 from nae_core.utils.utils import NAE_Utils
 from nae_core.utils.submodules.training_utils.data_loader import DataLoader as NAEDataLoader
 from nae_core.utils.submodules.training_utils.input_label_generator import InputLabelGenerator
+from nae_core.utils.submodules.preprocess_utils.data_preprocess import DataPreprocess
+from nae_core.utils.submodules.preprocess_utils.data_preprocess import DataDenormalizer
+
 
 import logging
 import psutil  # Thư viện để theo dõi CPU, RAM
@@ -302,7 +305,7 @@ class NAEDynamicLSTM():
             'data_dir': data_dir,
             'data_step_start': data_step_start,
             'data_step_end': data_step_end,
-            'data_increment': data_increment
+            'data_increment': data_increment,
         }
 
 
@@ -318,6 +321,10 @@ class NAEDynamicLSTM():
         self.encoder = Encoder(input_size, hidden_size).to(device)
         self.vls_lstm = VLSLSTM(hidden_size, hidden_size, num_layers_lstm, dropout_rate=dropout_rate).to(device)
         self.decoder = Decoder(hidden_size, output_size).to(device)
+
+        self.initialize_weights(self.encoder)
+        self.initialize_weights(self.vls_lstm)
+        self.initialize_weights(self.decoder)
 
         # self.criterion = nn.MSELoss(reduction='none').to(device)  # NOTE: Reduction 'none' to apply masking, default is 'mean'
         # self.optimizer = optim.Adam(list(self.encoder.parameters()) + list(self.vls_lstm.parameters()) + list(self.decoder.parameters()), lr=lr)
@@ -345,6 +352,18 @@ class NAEDynamicLSTM():
         self.util_printer = Printer()
         self.util_plotter = Plotter()
         self.wandb_run_url = ''
+        # self.data_preprocess = DataPreprocess()
+
+        self.enable_denormalize = self.check_normalization_files_exist(data_dir)
+        if self.enable_denormalize is not None:
+            pos_scaler_path = self.enable_denormalize['position_scaler.save']
+            vel_scaler_path = self.enable_denormalize['velocity_scaler.save']
+            acc_scaler_path = self.enable_denormalize['acceleration_scaler.save']
+            self.data_denormalizer = DataDenormalizer(pos_scaler_path=pos_scaler_path, vel_scaler_path=vel_scaler_path, acc_scaler_path=acc_scaler_path)
+            self.enable_denormalize = True
+            printer_global.print_green('Enable denormalize', background=True); input('Press Enter to continue')
+        else:
+            self.enable_denormalize = False
 
         print('\n')
         printer_global.print_green('----------------- MODEL PARAMS NUMBER -----------------', background=True)
@@ -408,6 +427,27 @@ class NAEDynamicLSTM():
             (labels_aureg_pad, lengths_aureg, mask_aureg),
             (labels_reconstruction_pad, lengths_reconstruction, mask_reconstruction),
         )
+
+    def initialize_weights(self, model):
+        for layer in model.modules():
+            # Khởi tạo lớp Linear (FC)
+            if isinstance(layer, nn.Linear):
+                nn.init.xavier_uniform_(layer.weight)  # Xavier Uniform cho trọng số
+                if layer.bias is not None:
+                    nn.init.constant_(layer.bias, 0.0)  # Bias thường khởi tạo là 0
+                    
+            # Khởi tạo lớp LSTM
+            elif isinstance(layer, nn.LSTM):
+                for name, param in layer.named_parameters():
+                    if 'weight_ih' in name:  # Input-hidden weights
+                        nn.init.xavier_uniform_(param)
+                    elif 'weight_hh' in name:  # Hidden-hidden weights
+                        nn.init.orthogonal_(param)
+                    elif 'bias' in name:
+                        nn.init.constant_(param, 0.0)  # Bias thường khởi tạo là 0
+                        # Hoặc khởi tạo đặc biệt cho phần bias của gate forget
+                        gate_size = param.size(0) // 4
+                        param.data[gate_size:2 * gate_size] = 1.0  # Forget gate bias = 1.0
     
     def train(self, data_train, data_val, checkpoint_path=None, enable_wandb=False,  save_model=True, test_anomaly=False, test_cuda_blocking=False, logging_level=logging.WARNING, debug=False, grad_norm_clip=None):
         # self._init_logging(logging_level, test_anomaly, test_cuda_blocking)
@@ -647,7 +687,7 @@ class NAEDynamicLSTM():
                     (mean_nade_future,  std_nade_future), \
                     (mean_nade_past,    std_nade_past), \
                     (mean_fe, std_fe, converge_to_final_point_trending), \
-                    capture_success_rates = self.validate_and_score(data=data_val, shuffle=False)
+                    capture_success_rates = self.validate_and_score(data=data_val, shuffle=False, denorm_data=self.enable_denormalize)
                 except RuntimeError as e:
                     # logging.error("Epoch {epoch} - VAL      RuntimeError during validation!") if debug else None
                     # logging.error("Epoch {epoch} - VAL      Error message: %s", str(e)) if debug else None
@@ -914,7 +954,7 @@ class NAEDynamicLSTM():
         print(f'Models were saved to {model_dir}')
         return model_dir
 
-    def validate_and_score(self, data, shuffle=False, inference=False):
+    def validate_and_score(self, data, shuffle=False, inference=False, denorm_data=False):
         self.util_printer.print_green(f'Validating: {len(data)} samples')
         dataloader = TorchDataLoader(data, batch_size=len(data), collate_fn=lambda x: self.collate_pad_fn(x), shuffle=shuffle)
         self.vls_lstm.eval()
@@ -961,6 +1001,13 @@ class NAEDynamicLSTM():
                 outputs_teafo_pad, output_aureg_pad = self.vls_lstm(inputs_lstm, lengths_in, lengths_aureg, mask_aureg)
                 output_teafo_pad_de = self.decoder(outputs_teafo_pad)
                 output_aureg_pad_de = self.decoder(output_aureg_pad)
+
+                if denorm_data==True:
+                    # denormalize outputs, labels
+                    output_teafo_pad_de = self.data_denormalizer.denormalize_data_all_feature_on_cuda(output_teafo_pad_de)
+                    labels_teafo_pad = self.data_denormalizer.denormalize_data_all_feature_on_cuda(labels_teafo_pad)
+                    output_aureg_pad_de = self.data_denormalizer.denormalize_data_all_feature_on_cuda(output_aureg_pad_de)
+                    labels_aureg_pad = self.data_denormalizer.denormalize_data_all_feature_on_cuda(labels_aureg_pad)
 
                 if inference:
                     predicted_seqs = self.merge_pad_trajectories(output_teafo_pad_de, lengths_teafo, output_aureg_pad_de, lengths_aureg)
@@ -1130,57 +1177,79 @@ class NAEDynamicLSTM():
 
     def compute_total_gradient_norm(self, models):
         """
-        Tính tổng norm L2 của gradient từ nhiều mô hình (models),
-        đảm bảo tất cả tensor trên cùng một thiết bị.
-
+        Tính tổng norm L2 của gradient từ nhiều mô hình (models).
         Args:
             models (list): Danh sách các mô hình (encoder, LSTM, decoder, etc.).
             
         Returns:
-            float: Tổng gradient norm L2 (hoặc inf/nan nếu phát hiện bất thường).
+            float: Tổng gradient norm L2, hoặc inf/nan nếu phát hiện bất thường.
         """
         # Lấy thiết bị từ mô hình đầu tiên
         device = next(models[0].parameters()).device
-        total_norm = torch.tensor(0.0, dtype=torch.float64, device=device)  # Đặt tensor trên thiết bị đúng
+        total_norm = 0.0  # Tích lũy tổng bình phương gradient norm
         
-        for md_idx, model in enumerate(models):
+        for model in models:
             for param in model.parameters():
-                if param.grad is not None:
-                    # Tính norm L2 của gradient cho từng tham số
-                    param_norm = param.grad.data.norm(2).to(device)  # Đảm bảo tensor nằm trên đúng thiết bị                    
+                if param.grad is not None:  # Kiểm tra nếu tham số có gradient
+                    # Tính norm L2 của gradient
+                    param_norm = param.grad.norm(2)  
                     # Kiểm tra giá trị inf hoặc nan
-                    if torch.isinf(param_norm):
-                        print(f"        Warning: MODEL {md_idx} - Gradient norm is inf for parameter {param}")
-                        if md_idx == 1:
-                            input('DEBUG LSTM please')
-                        return float('inf')
-                    if torch.isnan(param_norm):
-                        print(f"        Warning: MODEL {md_idx} - Gradient norm is NaN for parameter {param}")
-                        if md_idx == 1:
-                            input('DEBUG LSTM please')
-                        return float('nan')
+                    if torch.isinf(param_norm) or torch.isnan(param_norm):
+                        print(f"Warning: Gradient norm is inf or NaN for parameter {param}")
+                        return float('inf') if torch.isinf(param_norm) else float('nan')
                     
-                    # Cộng dồn bình phương của norm
-                    total_norm += param_norm ** 2
+                    # Cộng dồn bình phương norm
+                    total_norm += param_norm.item() ** 2
         
-        # Tính căn bậc hai tổng bình phương để ra norm tổng
-        total_norm = total_norm.sqrt()
-
-        # Kiểm tra tổng norm cuối cùng có hợp lệ không
-        if torch.isinf(total_norm):
-            print("Total Gradient Norm is inf!")
-            return float('inf')
-        if torch.isnan(total_norm):
-            print("Total Gradient Norm is NaN!")
-            return float('nan')
-
-        return total_norm.item()
+        # Trả về tổng norm L2 (căn bậc hai tổng bình phương)
+        total_norm = total_norm ** 0.5
+        return total_norm
 
 
     def save_model_config(self, model_dir):
         with open(os.path.join(model_dir, 'model_config.json'), 'w') as f:
             json.dump(self.model_config, f, indent=4)
         self.util_printer.print_green(f'Model config was saved to {model_dir}', background=True)
+
+    def check_normalization_files_exist(self, path):
+        """
+        Check if the provided path contains a folder named 'normalization' 
+        and if that folder contains specific files with a .save extension.
+
+        Args:
+            path (str): The root directory path to check.
+
+        Returns:
+            dict: A dictionary with the paths of specific .save files if they exist, 
+                or None for each file if it does not exist.
+        """
+        # Construct the path to the 'normalization' folder
+        normalization_path = os.path.join(path, 'normalization')
+
+        # Check if 'normalization' folder exists and is a directory
+        if not os.path.isdir(normalization_path):
+            return None
+
+        # Define the target files to search for
+        target_files = [
+            'position_scaler.save', 
+            'velocity_scaler.save', 
+            'acceleration_scaler.save'
+        ]
+
+        # Initialize a dictionary to store the results
+        file_paths = {file_name: None for file_name in target_files}
+
+        # Search for the target files in the 'normalization' folder
+        for file_name in os.listdir(normalization_path):
+            if file_name in target_files:
+                file_paths[file_name] = os.path.join(normalization_path, file_name)
+
+        # Check if any of the files were found
+        if any(file_paths.values()):
+            return file_paths
+
+        return None
 
 def main():
     device = torch.device('cuda')
