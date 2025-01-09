@@ -19,6 +19,23 @@ from nae_core.utils.submodules.preprocess_utils.data_raw_reader import RoCatData
 global_util_plotter = Plotter()
 global_util_printer = Printer()
 
+def check_constant_array(data, atol=1e-4):
+    """
+    Kiểm tra xem chuỗi dữ liệu 1D này có chứa tất cả các giá trị bằng nhau không
+    
+    Parameters:
+    - data: np.array, dữ liệu cần kiểm tra.
+    - atol: float, sai số cho phép khi kiểm tra giá trị gần bằng nhau (mặc định: 1e-4).
+    
+    Returns:
+    - has_constant: bool, True nếu tất cả các giá trị trong chuỗi dữ liệu bằng nhau, False nếu có ít nhất một giá trị khác.
+    """
+    # requirement: data is 1D array
+    if len(data.shape) != 1:
+        raise ValueError("Data must be a 1D array.")
+    is_constant = np.allclose(data, data[0], atol=atol)
+    return is_constant
+
 class DataNormalizer:
     def __init__(self, scaler_path=None, range_norm=(-0.5, 0.5)):
         global_util_printer.print_green("Constructing DataNormalizer...")
@@ -30,9 +47,24 @@ class DataNormalizer:
             raise ValueError("Bạn cần cung cấp scaler_path hoặc range_norm.")
         self.range_norm = range_norm
 
-    def normalize_data(self, data, object_name, note):
+    def normalize_data(self, data, object_name, note, atol=1e-4, round_decimals=6):
         if self.scaler is None:
             raise ValueError("Scaler chưa được khởi tạo.")
+                
+        # Kiểm tra từng cột
+        for i in range(data.shape[1]):
+            if check_constant_array(data[:, i], atol=atol):
+                '''
+                Round data before normalization to mitigate floating-point precision errors.
+                    In cases where all values in a column are theoretically the same, small differences
+                    due to floating-point representation might exist. Without rounding, these small
+                    differences could lead to incorrect normalization results, as the min-max range
+                    would not be zero but an extremely small value, causing distorted outputs.
+                '''
+                # Nếu cột là hằng số, làm tròn cột
+                # print(f"Column {i} is constant. Rounding to {round_decimals} decimals.")
+                data[:, i] = np.round(data[:, i], decimals=round_decimals)
+                
         data_normed = self.scaler.fit_transform(data)
         save_scaler = input('Do you want to save the scaler? (y/n): ')
         if save_scaler == 'y':
@@ -154,12 +186,9 @@ class DataDenormalizer():
         return denormalized_data
 
 class DataPreprocess(DataNormalizer):
-    def __init__(self, scaler_path=None, range_norm=(-0.5, 0.5), norm_pos=True, norm_vel=True, norm_acc=True):
+    def __init__(self, scaler_path=None, range_norm=(-0.5, 0.5)):
         # Gọi hàm khởi tạo của class cha
         super().__init__(scaler_path, range_norm)
-        self.norm_pos = norm_pos
-        self.norm_vel = norm_vel
-        self.norm_acc = norm_acc
 
     def vel_interpolation(self, x_arr, t_arr, method='spline-k3-s0'):
         '''
@@ -660,7 +689,7 @@ class DataPreprocess(DataNormalizer):
             print(f"  {prefix}{key}")  # In key hiện tại
             self.inspect_dict_structure(d[key], prefix=f"{prefix}{key}.")  # Gọi đệ quy cho keys con
 
-    def normalize_data_features(self, data, object_name, debug=False):
+    def normalize_data_features(self, data, object_name, debug=False, enable_norm_pos=False, enable_norm_vel=False, enable_norm_acc=False):
         global_util_printer.print_blue('\n- Normalizing data (pos, vel, acc)', background=True)
         # Check data before normalization
         for idx, traj in enumerate(data):
@@ -674,9 +703,9 @@ class DataPreprocess(DataNormalizer):
 
         # Prepare to normalize position, velocity, and acceleration separately
         for norm_type, start_idx, end_idx, should_normalize in [
-            ("position", 0, 3, self.norm_pos),
-            ("velocity", 3, 6, self.norm_vel),
-            ("acceleration", 6, 9, self.norm_acc),
+            ("position", 0, 3, enable_norm_pos),
+            ("velocity", 3, 6, enable_norm_vel),
+            ("acceleration", 6, 9, enable_norm_acc),
         ]:
             if should_normalize:
                 global_util_printer.print_blue(f"- Normalizing {norm_type}", background=True)
@@ -684,7 +713,19 @@ class DataPreprocess(DataNormalizer):
                 feature_data_no_norm = [traj['preprocess']['model_data'][:, start_idx:end_idx].copy() for traj in data]
                 feature_flatten = np.vstack(feature_data_no_norm)  # Flatten the data into a 2D array
                 feature_flatten_normed_flatten = self.normalize_data(feature_flatten, object_name, note=norm_type)  # Normalize each column independently
-                
+
+                # # check in feature_flatten_normed_flatten, if all acc_x are same, all acc_y are same, all acc_z are same
+                # is_acc_x_true_af = np.all(np.abs(feature_flatten_normed_flatten[:, 0] - feature_flatten_normed_flatten[:, 0][0]) < 1e-4)        # result: False
+                # is_acc_y_true_af = np.all(np.abs(feature_flatten_normed_flatten[:, 1] - feature_flatten_normed_flatten[:, 1][0]) < 1e-4)        # result: False
+                # is_acc_z_true_af = np.all(np.abs(feature_flatten_normed_flatten[:, 2] - feature_flatten_normed_flatten[:, 2][0]) < 1e-4)        # result: False
+                # if not is_acc_x_true_af or not is_acc_y_true_af or not is_acc_z_true_af:
+                #     global_util_printer.print_red(f'After normalization: there are wrong acceleration')
+                #     print('acc_x: ', feature_flatten_normed_flatten[:, 0])  # [-0.10365854 -0.03658537  0.0304878  ...  0.04471545 -0.04471545 -0.13414634]
+                #     print('acc_y: ', feature_flatten_normed_flatten[:, 1])  # [-0.01247025 -0.02057648 -0.02868271 ...  0.15056992 -0.0369606 -0.2244873 ]
+                #     print('acc_z: ', feature_flatten_normed_flatten[:, 2])  # [-0.20588235 -0.01470588  0.17647059 ...  0.10457516  0.00326797 -0.09803922]
+                # else:
+                #     global_util_printer.print_green('After normalization: All trajectories have correct acceleration')
+
                 # Restore the data back into individual trajectories
                 start = 0
                 for idx, length in enumerate(len_list):
@@ -704,9 +745,9 @@ class DataPreprocess(DataNormalizer):
             traj_rand = data[idx_rand]
             
             for norm_type, start_idx, end_idx, should_normalize in [
-                ("position", 0, 3, self.norm_pos),
-                ("velocity", 3, 6, self.norm_vel),
-                ("acceleration", 6, 9, self.norm_acc),
+                ("position", 0, 3, enable_norm_pos),
+                ("velocity", 3, 6, enable_norm_vel),
+                ("acceleration", 6, 9, enable_norm_acc),
             ]:
                 if should_normalize:
                     # Before normalization
@@ -749,18 +790,25 @@ def main():
     # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bamboo_168'
     # object_name = 'Bamboo'
 
-    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bottle_115'
-    object_name = 'Bottle'
+    # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bottle_115'
+    # object_name = 'Bottle'
 
-    data_raw = RoCatDataRawReader(data_dir).read()
+    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_static/parabol_data'
+    object_name = 'parabol-no-butterworth-filter'
+
+    data_raw = RoCatDataRawReader(data_dir).read()      # 'frame_num', 'time_step', 'position', 'quaternion'
     FS = 120 # Sampling frequency
     CUTOFF = 25 # Cutoff frequency
     CUBIC_SPLINE = 'spline-k3-s0'
-    RANGE_NORM = (-1, 1)
-    NORM_POS = True
-    NORM_VEL = True
+
+    RANGE_NORM = (-0.5, 0.5)
+    NORM_POS = False
+    NORM_VEL = False
     NORM_ACC = True
-    data_preprocess = DataPreprocess(range_norm=RANGE_NORM, norm_pos=NORM_POS, norm_vel=NORM_VEL, norm_acc=NORM_ACC)
+
+
+
+    data_preprocess = DataPreprocess(range_norm=RANGE_NORM)
     s_value, k_value = data_preprocess.get_s_k_values_from_string(CUBIC_SPLINE)
     print(f"Found SPLINE configure: s: {s_value}, k: {k_value}")
 
@@ -772,14 +820,45 @@ def main():
     # ------------------------------------------------------------
     # 1. Apply Butterworth filter and interpolation
     # ------------------------------------------------------------
-    data_pp = data_preprocess.apply_butterworth_filter(data_pp, cutoff=CUTOFF, freq_samp=FS, butterworth_loop=1, debug=False)
-    input('Done applying ButterWorth filter. Press Enter to continue...')
+    # data_pp = data_preprocess.apply_butterworth_filter(data_pp, cutoff=CUTOFF, freq_samp=FS, butterworth_loop=1, debug=False)
+    # input('Done applying ButterWorth filter. Press Enter to continue...')
 
     # -------------------------------------------
     # 2. Interpolate velocities and accelerations
     # -------------------------------------------
     data_pp = data_preprocess.vel_acc_interpolation(data_pp, interpolate_method=CUBIC_SPLINE)
     input('Done interpolating velocities and accelerations. Press Enter to continue...')
+    # data_preprocess.plot_acc(data_pp[0], note='Trajectory 0 - Before normalization'); input()
+
+    # kiểm tra giá trị gia tốc có như mong muốn không: ax = 0, ay = -9.81, az = 0
+    acc_data = [traj['preprocess']['model_data'][:, 6:].copy() for traj in data_pp]
+    for traj_idx, acc_traj in enumerate(acc_data):
+        acc_traj = np.array(acc_traj)  # Chuyển sang numpy array nếu chưa phải
+
+        acc_traj_x = acc_traj[:, 0]    # Trích xuất cột 0 của acc_traj
+        # print('acc_traj_x: ', acc_traj_x); input()
+        indices_x = np.where(np.abs(acc_traj_x) > 1e-4)  # Kiểm tra điều kiện chỉ trên cột 0
+        if len(indices_x[0]) > 0:  # Chỉ kiểm tra số lượng hàng (indices[0])
+            print(f'traj {traj_idx} -> x')
+            print(f'    traj {traj_idx} - indices: {indices_x}')
+            print(f'    traj {traj_idx} - values: {acc_traj_x[indices_x]}')
+            input()
+        
+        acc_traj_y = acc_traj[:, 1]    # Trích xuất cột 1 của acc_traj
+        indices_y = np.where(np.abs(acc_traj_y + 9.81) > 1e-4)  # Kiểm tra điều kiện chỉ trên cột 1
+        if len(indices_y[0]) > 0:  # Chỉ kiểm tra số lượng hàng (indices[0])
+            print(f'traj {traj_idx} -> y')
+            print(f'    traj {traj_idx} - indices: {indices_y}')
+            input()
+        
+        acc_traj_z = acc_traj[:, 2]    # Trích xuất cột 2 của acc_traj
+        indices_z = np.where(np.abs(acc_traj_z) > 1e-4)  # Kiểm tra điều kiện chỉ trên cột 2
+        if len(indices_z[0]) > 0:  # Chỉ kiểm tra số lượng hàng (indices[0])
+            print(f'traj {traj_idx} -> z')
+            print(f'    traj {traj_idx} - indices: {indices_z}')
+            input()
+    global_util_printer.print_green('All trajectories are good'); input()
+    # --- done kiểm tra giá trị gia tốc
 
     # ------------------------------------------------------------
     # 3. Filter out outlier trajectories with outlier acceleration
@@ -789,29 +868,26 @@ def main():
     data_pp = cleaned_data
     input('Done filtering outlier trajectories. Press Enter to continue...')
                     
-    acc_data_no_norm = data_pp[0]['preprocess']['model_data'][:, 6:].copy()
+    data_no_norm = copy.deepcopy(data_pp)   # deep copy
+    # # plot acc
+    # data_preprocess.plot_acc(data_no_norm[0], note='Trajectory 0 - Before Norm'); input()
+    # # plot vel
+    # data_preprocess.plot_vel(data_no_norm[0], note='Trajectory 0 - Before Norm'); input()
+    # # plot pos
+    # data_preprocess.plot_pos(data_no_norm[0], note='Trajectory 0 - Before Norm'); input()
     # ----------------------------------------
     # 4. Normalize acceleration on all dataset
     # ----------------------------------------
-    data_pp = data_preprocess.normalize_data_features(data_pp, object_name, debug=False)
+    data_pp = data_preprocess.normalize_data_features(data_pp, object_name, enable_norm_pos=NORM_POS, enable_norm_vel=NORM_VEL, enable_norm_acc=NORM_ACC, debug=False)
     input('Done normalizing acceleration. Press Enter to continue...')
 
-    # # plot acc
-    # data_preprocess.plot_acc(data_pp[0], note='Trajectory 0 - After normalization'); input()
-    # # plot vel
-    # data_preprocess.plot_vel(data_pp[0], note='Trajectory 0 - After normalization'); input()
-    # # plot pos
-    # data_preprocess.plot_pos(data_pp[0], note='Trajectory 0 - After normalization'); input()
+    # plot acc
+    data_preprocess.plot_acc(data_pp[0], note='Trajectory 0 - After Norm'); input()
+    # plot vel
+    data_preprocess.plot_vel(data_pp[0], note='Trajectory 0 - After Norm'); input()
+    # plot pos
+    data_preprocess.plot_pos(data_pp[0], note='Trajectory 0 - After Norm'); input()
 
-    # input('ENTER to continue...')
-    # # plot acc
-    # data_preprocess.plot_acc(data_pp[0], note='Trajectory 0 - After normalization'); input()
-
-    # # check ratio of data after normalization
-    # acc_data_norm = data_pp[0]['preprocess']['model_data'][:, 6:].copy()
-    # for idx, acc_no_norm, acc_norm in zip(range(len(acc_data_no_norm)), acc_data_no_norm, acc_data_norm):
-    #     print(f'{idx} - Ratio: {acc_no_norm[0] / acc_norm[0]} - {acc_no_norm[1] / acc_norm[1]} - {acc_no_norm[2] / acc_norm[2]}')
-    #     input()
 
     # ----------------------------------------
     # 5. Split data into train, val, test
