@@ -19,7 +19,7 @@ New data format:
 
 import numpy as np
 import os
-from nae_core.utils.submodules.preprocess_utils.data_raw_reader import RoCatRLLabDataRawReader, RoCatNAEDataRawReader
+from nae_core.utils.submodules.preprocess_utils.data_raw_reader import RoCatRLLabDataRawReader
 from nae_core.utils.submodules.preprocess_utils.data_raw_correction_checker import RoCatRLDataRawCorrectionChecker
 from nae_core.utils.submodules.preprocess_utils.data_splitter import RoCatDataSplitter
 from python_utils.plotter import Plotter
@@ -199,8 +199,7 @@ class RLLabDatasetDataFormater(DataFormater):
     '''
     seperate each trajectory in the dataset to a npz file
     '''
-    def format_data(self, data_path, object_name='', save=False, init_points_removed_num=0, last_points_removed_num=0, min_len_traj=None, data_removed_idx_list=[], \
-                    vel_interpolation_method='manual', acc_interpolation_method='manual'):
+    def format_data(self, data_path, object_name='', save=False, init_points_removed_num=0, last_points_removed_num=0, min_len_traj=None, data_removed_idx_list=[]):
         data_reader = RoCatRLLabDataRawReader(data_path)
         data_raw = data_reader.read_raw_data()
         data_new = []
@@ -244,26 +243,13 @@ class RLLabDatasetDataFormater(DataFormater):
             data_new.append(new_d)
 
         if save:
-            # choose randomly 90% of data_new as training dataset and 10% as testing dataset manually 
-            import random
-            for _ in range(10):
-                random.shuffle(data_new)
-            # Chia tỷ lệ 90% và 10%
-            split_index = int(0.9 * len(data_new))  # Tính chỉ số chia
+            for i, d in enumerate(data_new):
+                self.save_every_traj_to_npz(d, object_name, i, len(pos))
 
-            training_data = data_new[:split_index]  # 90% đầu tiên cho training
-            testing_data = data_new[split_index:]  # 10% còn lại cho testing
-
-            # save data in training_data to npz files
-            for i, d in enumerate(training_data):
-                self.save_every_traj_to_npz(d, object_name, i, len(pos), data_type='training_data')
-            # save data in testing_data to npz files
-            for i, d in enumerate(testing_data):
-                self.save_every_traj_to_npz(d, object_name, i, len(pos), data_type='testing_data')
         return data_new
     
 
-    def save_every_traj_to_npz(self, new_d, object_name, data_idx, total_data_num, data_type='training_data'):
+    def save_every_traj_to_npz(self, new_d, object_name, data_idx, total_data_num):
         # save new_d to npz
         # get current path
         current_path = os.path.dirname(os.path.realpath(__file__))
@@ -272,7 +258,7 @@ class RLLabDatasetDataFormater(DataFormater):
         # save new data
         if object_name == '':
             object_name = data_path.split('/')[-2]
-        new_data_folder = os.path.join(parent_path, 'data', object_name, data_type)
+        new_data_folder = os.path.join(parent_path, 'data', object_name)
         file_name = f'{object_name}_traj_{data_idx}_len_{total_data_num}_{data_idx}.npz'
         
         # mkdir if not exist
@@ -303,71 +289,16 @@ class RLLabDatasetDataFormater(DataFormater):
             f.close()
 
 if __name__ == '__main__':
-    # # =========================== RLLab dataset format ===========================
-    # data_path = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/new_dataset_no_orientation/new_format/big_plane_merged_264_ORIGIN.npz'
-    # object_name = 'big_plane'
-    # data_removed_idx_list = []
-    # min_len_traj = 70
-
-    # data_path = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/new_dataset_no_orientation/new_format/frisbee-pbl_num_275_ORIGIN.npz'
-    # object_name = 'frisbee'
-    # data_removed_idx_list = [35, 80, 84, 243, 261, 158] # only apply for frisbee
-    # min_len_traj = 70
-
-    # data_path = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/new_dataset_no_orientation/new_format/boomerang_num-252_ORIGIN.npz'
-    # object_name = 'boomerang'
-    # data_removed_idx_list = []
-    # min_len_traj = 70
-
-    # =========================== RLLab dataset format ===========================
     # data_path = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/new_dataset_no_orientation/new_format/1_original/big_plane_merged_264_ORIGIN.npz'
-    # object_name = 'big_plane'
+    # object_name = 'plane'
 
-    data_path = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/new_dataset_no_orientation/new_format/1_original/boomerang_num-252_ORIGIN.npz'
-    object_name = 'boomerang'
+    data_path = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/new_dataset_no_orientation/new_format/1_original/frisbee-pbl_num_275_ORIGIN.npz'
+    object_name = 'frisbee'
     data_removed_idx_list = []
     min_len_traj = None
     data_formater = RLLabDatasetDataFormater()
-    vel_interpolation_method = 'manual'      # 'cubic', 'linear', 'manual'
-    acc_interpolation_method = 'linear'      # 'cubic', 'linear', 'manual'
     new_data = data_formater.format_data(data_path, object_name=object_name, save=True, 
-                                         init_points_removed_num=5, last_points_removed_num=2, min_len_traj=min_len_traj, data_removed_idx_list=data_removed_idx_list,
-                                         vel_interpolation_method=vel_interpolation_method,
-                                         acc_interpolation_method=acc_interpolation_method)
+                                         init_points_removed_num=5, last_points_removed_num=2, min_len_traj=min_len_traj, data_removed_idx_list=data_removed_idx_list)
 
-    # # plot acceleration of the first trajectory
-    # acc_x = new_data[0]['points'][:, 6]
-    # acc_y = new_data[0]['points'][:, 7]
-    # acc_z = new_data[0]['points'][:, 8]
-    # x_values = np.arange(len(acc_x))
-    # global_util_plotter.plot_line_chart(x_values=x_values, y_values=[acc_x, acc_y, acc_z], \
-    #                                     title=f'Acceleration - {object_name}  |  VEL_interpolate: {vel_interpolation_method} - ACC_interpolate: {acc_interpolation_method}', \
-    #                                     x_label='Time step', y_label='Acceleration x', \
-    #                                     legends=['acc_x', 'acc_y', 'acc_z'])
-
-    # # plot velocity of the first trajectory
-    # vel_x = new_data[0]['points'][:, 3]
-    # vel_y = new_data[0]['points'][:, 4]
-    # vel_z = new_data[0]['points'][:, 5]
-    # x_values = np.arange(len(vel_x))
-    # global_util_plotter.plot_line_chart(x_values=x_values, y_values=[vel_x, vel_y, vel_z], \
-    #                                     title=f'Velocity - {object_name}  |  VEL_interpolate: {vel_interpolation_method} - ACC_interpolate: {acc_interpolation_method}', \
-    #                                     x_label='Time step', y_label='Velocity', \
-    #                                     legends=['vel_x', 'vel_y', 'vel_z'])
-
-    # # plot position of the first trajectory
-    # pos_x = new_data[0]['points'][:, 0]
-    # pos_y = new_data[0]['points'][:, 1]
-    # pos_z = new_data[0]['points'][:, 2]
-    # x_values = np.arange(len(pos_x))
-    # global_util_plotter.plot_line_chart(x_values=x_values, y_values=[pos_x, pos_y, pos_z], title=f'Position - {object_name} - {interpolation_method}', x_label='Time step', y_label='Position z')
-
-
-    # input('Do you want to check data correction?')
-    # data_correction_checker = RoCatRLDataRawCorrectionChecker()
-    # data_correction_checker.check_data_correction(new_data, data_whose_y_up=True)
-
-    input('Do you want to split data?')
-    data_splitter = RoCatDataSplitter(new_data, train_ratio=0.8, val_ratio=0.1, num_first_points_to_cut=0, object_name=object_name)
-    data_splitter.split(shuffle_data=True) 
+    print('After format data: ', len(new_data))
 
