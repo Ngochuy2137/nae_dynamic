@@ -460,11 +460,12 @@ class DataPreprocess(DataNormalizer):
 
     def vel_acc_interpolation(self, data, interpolate_method='spline-k3-s0'):
         global_util_printer.print_blue('\n- Interpolating velocities and accelerations', background=True)
-
+        # deep copy data
+        data_cp = copy.deepcopy(data)
         # check if data has available fields
-        if 'position'in data[0]['preprocess']:
+        if 'position'in data_cp[0]['preprocess']:
             source_field = 'preprocess'
-        elif 'position' in data[0]['original']:
+        elif 'position' in data_cp[0]['original']:
             global_util_printer.print_yellow('Cannot find position data in "preprocess" field. Do you want to use position data in "original" field instead [y/n] ?')
             ans = input()
             if ans == 'y':
@@ -475,7 +476,7 @@ class DataPreprocess(DataNormalizer):
             raise ValueError("No position data in preprocess data.")
         
         data_pp = []
-        for idx, traj in enumerate(data):
+        for idx, traj in enumerate(data_cp):
             # traj Keys of field 'original': frame_num, time_step, position, quaternion
             # pos_seq = traj[source_field]['position'].copy()
             pos_seq = copy.deepcopy(traj[source_field]['position']) # use deepcopy to avoid changing the original data
@@ -708,7 +709,7 @@ class DataPreprocess(DataNormalizer):
             ("acceleration", 6, 9, enable_norm_acc),
         ]:
             if should_normalize:
-                global_util_printer.print_blue(f"- Normalizing {norm_type}", background=True)
+                global_util_printer.print_blue(f"   - Normalizing {norm_type}", background=True)
                 # Extract the data to normalize
                 feature_data_no_norm = [traj['preprocess']['model_data'][:, start_idx:end_idx].copy() for traj in data]
                 feature_flatten = np.vstack(feature_data_no_norm)  # Flatten the data into a 2D array
@@ -784,7 +785,58 @@ class DataPreprocess(DataNormalizer):
         data_test = data[num_train + num_val:]
         global_util_printer.print_green(f'Split data into train: {num_train}, val: {num_val}, test: {num_test}')
         return data_train, data_val, data_test
+    
+    def plot_data(self, data_pp, idx, note='', plot_acc=False, plot_vel=False, plot_pos=False):
+        if note != '':
+            note = f' - {note}'
+        # plot acc
+        if plot_acc:
+            self.plot_acc(data_pp[idx], note=f'Trajectory {idx}{note}')
+        # plot vel
+        if plot_vel:
+            self.plot_vel(data_pp[idx], note=f'Trajectory {idx}{note}')
+        # plot pos
+        if plot_pos:
+            self.plot_pos(data_pp[idx], note=f'Trajectory {idx}{note}')
 
+    def check_parabol_preprocessed_data(self, data_pp):
+        # kiểm tra giá trị gia tốc có như mong muốn không: ax = 0, ay = -9.81, az = 0
+        acc_data = [traj['preprocess']['model_data'][:, 6:].copy() for traj in data_pp]
+        not_good = False
+        for traj_idx, acc_traj in enumerate(acc_data):
+            acc_traj = np.array(acc_traj)  # Chuyển sang numpy array nếu chưa phải
+
+            acc_traj_x = acc_traj[:, 0]    # Trích xuất cột 0 của acc_traj
+            # print('acc_traj_x: ', acc_traj_x); input()
+            indices_x = np.where(np.abs(acc_traj_x) > 1e-4)  # Kiểm tra điều kiện chỉ trên cột 0
+            if len(indices_x[0]) > 0:  # Chỉ kiểm tra số lượng hàng (indices[0])
+                print(f'traj {traj_idx} -> x')
+                print(f'    traj {traj_idx} - indices: {indices_x}')
+                print(f'    traj {traj_idx} - values: {acc_traj_x[indices_x]}')
+                not_good = True
+                # input()
+            
+            acc_traj_y = acc_traj[:, 1]    # Trích xuất cột 1 của acc_traj
+            indices_y = np.where(np.abs(acc_traj_y + 9.81) > 1e-4)  # Kiểm tra điều kiện chỉ trên cột 1
+            if len(indices_y[0]) > 0:  # Chỉ kiểm tra số lượng hàng (indices[0])
+                print(f'traj {traj_idx} -> y')
+                print(f'    traj {traj_idx} - indices: {indices_y}')
+                print(f'    traj {traj_idx} - values: {acc_traj_y[indices_y]}')
+                not_good = True
+                # input()
+            
+            acc_traj_z = acc_traj[:, 2]    # Trích xuất cột 2 của acc_traj
+            indices_z = np.where(np.abs(acc_traj_z) > 1e-4)  # Kiểm tra điều kiện chỉ trên cột 2
+            if len(indices_z[0]) > 0:  # Chỉ kiểm tra số lượng hàng (indices[0])
+                print(f'traj {traj_idx} -> z')
+                print(f'    traj {traj_idx} - indices: {indices_z}')
+                print(f'    traj {traj_idx} - values: {acc_traj_z[indices_z]}')
+                not_good = True
+                # input()
+        if not_good:
+            global_util_printer.print_red('Not all trajectories have the expected acceleration values')
+        else:
+            global_util_printer.print_green('All trajectories are good'); input()
 
 def main():
     # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bamboo_168'
@@ -793,12 +845,12 @@ def main():
     # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bottle_115'
     # object_name = 'Bottle'
 
-    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_static/parabol_data'
-    object_name = 'parabol-no-butterworth-filter'
+    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bottle_115'
+    object_name = f'bottle-butterworth-filter'
 
     data_raw = RoCatDataRawReader(data_dir).read()      # 'frame_num', 'time_step', 'position', 'quaternion'
     FS = 120 # Sampling frequency
-    CUTOFF = 25 # Cutoff frequency
+    CUTOFF = 15 # Cutoff frequency
     CUBIC_SPLINE = 'spline-k3-s0'
 
     RANGE_NORM = (-0.5, 0.5)
@@ -808,6 +860,7 @@ def main():
 
 
 
+    object_name = object_name + f'-cutoff-{CUTOFF}'
     data_preprocess = DataPreprocess(range_norm=RANGE_NORM)
     s_value, k_value = data_preprocess.get_s_k_values_from_string(CUBIC_SPLINE)
     print(f"Found SPLINE configure: s: {s_value}, k: {k_value}")
@@ -816,12 +869,12 @@ def main():
     # 0. Create a new field 'original' in data_raw to store the original data
     # ------------------------------------------------------------
     data_pp = data_preprocess.backup_data(data_raw, object_name)
-
+    # data_pp_no_filter = data_preprocess.vel_acc_interpolation(data_pp, interpolate_method=CUBIC_SPLINE)
     # ------------------------------------------------------------
     # 1. Apply Butterworth filter and interpolation
     # ------------------------------------------------------------
-    # data_pp = data_preprocess.apply_butterworth_filter(data_pp, cutoff=CUTOFF, freq_samp=FS, butterworth_loop=1, debug=False)
-    # input('Done applying ButterWorth filter. Press Enter to continue...')
+    data_pp = data_preprocess.apply_butterworth_filter(data_pp, cutoff=CUTOFF, freq_samp=FS, butterworth_loop=1, debug=False)
+    input('Done applying ButterWorth filter. Press Enter to continue...')
 
     # -------------------------------------------
     # 2. Interpolate velocities and accelerations
@@ -830,45 +883,41 @@ def main():
     input('Done interpolating velocities and accelerations. Press Enter to continue...')
     # data_preprocess.plot_acc(data_pp[0], note='Trajectory 0 - Before normalization'); input()
 
-    # kiểm tra giá trị gia tốc có như mong muốn không: ax = 0, ay = -9.81, az = 0
-    acc_data = [traj['preprocess']['model_data'][:, 6:].copy() for traj in data_pp]
-    for traj_idx, acc_traj in enumerate(acc_data):
-        acc_traj = np.array(acc_traj)  # Chuyển sang numpy array nếu chưa phải
 
-        acc_traj_x = acc_traj[:, 0]    # Trích xuất cột 0 của acc_traj
-        # print('acc_traj_x: ', acc_traj_x); input()
-        indices_x = np.where(np.abs(acc_traj_x) > 1e-4)  # Kiểm tra điều kiện chỉ trên cột 0
-        if len(indices_x[0]) > 0:  # Chỉ kiểm tra số lượng hàng (indices[0])
-            print(f'traj {traj_idx} -> x')
-            print(f'    traj {traj_idx} - indices: {indices_x}')
-            print(f'    traj {traj_idx} - values: {acc_traj_x[indices_x]}')
-            input()
-        
-        acc_traj_y = acc_traj[:, 1]    # Trích xuất cột 1 của acc_traj
-        indices_y = np.where(np.abs(acc_traj_y + 9.81) > 1e-4)  # Kiểm tra điều kiện chỉ trên cột 1
-        if len(indices_y[0]) > 0:  # Chỉ kiểm tra số lượng hàng (indices[0])
-            print(f'traj {traj_idx} -> y')
-            print(f'    traj {traj_idx} - indices: {indices_y}')
-            input()
-        
-        acc_traj_z = acc_traj[:, 2]    # Trích xuất cột 2 của acc_traj
-        indices_z = np.where(np.abs(acc_traj_z) > 1e-4)  # Kiểm tra điều kiện chỉ trên cột 2
-        if len(indices_z[0]) > 0:  # Chỉ kiểm tra số lượng hàng (indices[0])
-            print(f'traj {traj_idx} -> z')
-            print(f'    traj {traj_idx} - indices: {indices_z}')
-            input()
-    global_util_printer.print_green('All trajectories are good'); input()
-    # --- done kiểm tra giá trị gia tốc
 
+    bad_count = 0
+    for idx, traj in enumerate(data_pp):
+        # get acc data
+        acc_data = traj['preprocess']['model_data'][:, 6:].copy()
+        for a_p in acc_data:
+            thres = 20
+            if abs(a_p[0]) > thres or abs(a_p[1]) > thres or abs(a_p[2]) > thres:
+                # plot raw data
+                # data_preprocess.plot_data(data_pp_no_filter, idx, note='without Butterworth filter', plot_acc=True)
+                # # plot preprocess data
+                # data_preprocess.plot_data(data_pp, idx, note='with Butterworth filter', plot_acc=True); input()
+                bad_count += 1
+                break
+    input(f'bad_count: {bad_count}')
+
+    # data_preprocess.plot_data(data_pp, 4, note='with Butterworth filter', plot_acc=True, plot_vel=True)
+    # data_preprocess.plot_data(data_pp, 18, note='with Butterworth filter', plot_acc=True, plot_vel=True)
+    # data_preprocess.plot_data(data_pp, 23, note='with Butterworth filter', plot_acc=True, plot_vel=True)
+    # data_preprocess.plot_data(data_pp, 31, note='with Butterworth filter', plot_acc=True, plot_vel=True)
+    # data_preprocess.plot_data(data_pp, 45, note='with Butterworth filter', plot_acc=True, plot_vel=True)
+    # data_preprocess.plot_data(data_pp, 61, note='with Butterworth filter', plot_acc=True, plot_vel=True)
+    # input()
+
+    # data_preprocess.check_parabol_preprocessed_data(data_pp)
     # ------------------------------------------------------------
     # 3. Filter out outlier trajectories with outlier acceleration
     # ------------------------------------------------------------
-    cleaned_data, outlier_trajectories, traj_idxs_with_noise_treatment = data_preprocess.detect_acc_outlier(data_pp, acc_threshold=(-30, 30), gap_threshold=3, edge_margin=25, min_len_threshold=80, plot_outlier=True, debug=True)
+    cleaned_data, outlier_trajectories, traj_idxs_with_noise_treatment = data_preprocess.detect_acc_outlier(data_pp, acc_threshold=(-15, 15), gap_threshold=3, edge_margin=25, min_len_threshold=80, plot_outlier=True, debug=True)
     global_util_printer.print_yellow(f'Number of outlier trajectories: {len(outlier_trajectories)}')
     data_pp = cleaned_data
     input('Done filtering outlier trajectories. Press Enter to continue...')
                     
-    data_no_norm = copy.deepcopy(data_pp)   # deep copy
+    # data_no_norm = copy.deepcopy(data_pp)   # deep copy
     # # plot acc
     # data_preprocess.plot_acc(data_no_norm[0], note='Trajectory 0 - Before Norm'); input()
     # # plot vel
@@ -882,11 +931,11 @@ def main():
     input('Done normalizing acceleration. Press Enter to continue...')
 
     # plot acc
-    data_preprocess.plot_acc(data_pp[0], note='Trajectory 0 - After Norm'); input()
+    data_preprocess.plot_acc(data_pp[0], note=f'Trajectory 0 - After Norm - BWfilter {CUTOFF}'); input()
     # plot vel
-    data_preprocess.plot_vel(data_pp[0], note='Trajectory 0 - After Norm'); input()
+    data_preprocess.plot_vel(data_pp[0], note=f'Trajectory 0 - After Norm - BWfilter {CUTOFF}'); input()
     # plot pos
-    data_preprocess.plot_pos(data_pp[0], note='Trajectory 0 - After Norm'); input()
+    data_preprocess.plot_pos(data_pp[0], note=f'Trajectory 0 - After Norm - BWfilter {CUTOFF}'); input()
 
 
     # ----------------------------------------
