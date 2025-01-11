@@ -41,9 +41,20 @@ class RoCatDataRawReader:
     
     def read(self):
         return self.trajectories
-    
 
+    def read_position(self, ):
+        pos_data = [traj['position'] for traj in self.trajectories]
+        return pos_data
     
+class RoCatRLLabDataRawReader:
+    def __init__(self, file_path):
+        # load the npz file
+        self.trajectories = np.load(file_path, allow_pickle=True)['trajectories']
+        print('Loaded ', len(self.trajectories), ' trajectories')
+    
+    def read_raw_data(self):
+        return self.trajectories
+
 # main
 if __name__ == '__main__':
     # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/data_preprocessed/Bamboo/data_train-134'
