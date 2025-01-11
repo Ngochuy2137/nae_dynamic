@@ -515,7 +515,7 @@ class NAEDynamicLSTM():
                         mask_aureg = mask_aureg.to(self.device, non_blocking=True)
                         mask_reconstruction = mask_reconstruction.to(self.device, non_blocking=True)
 
-
+                        self.optimizer.zero_grad()
                         # # check shape masks
                         # print('OUT:')
                         # print('     mask_in shape: ', mask_in.shape)
@@ -592,10 +592,6 @@ class NAEDynamicLSTM():
                             loss_mean = self.loss1_weight*loss_1_mean + self.loss2_weight*loss_2_mean + loss_3_mean
 
                         # Backward pass
-                        self.optimizer.zero_grad()
-                                                
-                        # loss_mean.backward()
-
                         scaler.scale(loss_mean).backward()
 
 
@@ -708,6 +704,7 @@ class NAEDynamicLSTM():
                         'valid_loss_1': mean_loss_1_log_val,
                         'valid_loss_2': mean_loss_2_log_val,
                         'valid_loss_3': mean_loss_3_log_val,
+                        'train_loss_total': loss_total_train_log,
                     }, step=epoch)
 
                     wandb.log({
@@ -965,15 +962,6 @@ class NAEDynamicLSTM():
         loss_1_log = 0.0
         loss_2_log = 0.0
         loss_3_log = 0.0
-        # sum_mse_all = 0.0
-        # sum_mse_xyz = 0.0
-        # mean_ade_entire = None
-        # mean_ade_future = None
-        # mean_nade_entire = None
-        # mean_nade_future = None
-        # mean_final_step_err = None
-        # mean_capture_success_rate = None
-        # converge_to_final_point_trending = None
 
         if inference:
             predicted_seqs_all = []
