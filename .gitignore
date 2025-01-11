@@ -4,13 +4,13 @@
 **/backup/
 **/log_profiling/
 # except models with name starting with @
-!**/models/**/@*/
-!**/models/**/@*/**
+# !**/models/**/@*/
+# !**/models/**/@*/**
 # ignore all files with .npy, .npz in name in subfolders and all its contents, but accept files in specific folders
 **/*.npy
 **/*.npz
-!**data/frisbee/**
-!**data/nae_paper_dataset/**
+# !**data/frisbee/**
+# !**data/nae_paper_dataset/**
 
 # ignore .pyc files
 *.pyc
