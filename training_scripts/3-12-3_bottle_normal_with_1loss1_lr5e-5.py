@@ -11,17 +11,18 @@ def main():
     random.seed(seed)
 
     data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/data_preprocessed/norm_acc/Bottle'
-    thrown_object = 'bottle-1loss1-inlen-2-wc1e-4'
+    thrown_object = '3-12-3_bottle_normal_with_1loss1_lr5e-5'
     
     checkout_path = None
     wdb_run_id=None   # 't5nlloi0'
     wdb_resume=None   # 'allow'
-    enable_wandb = False
-    save_model = False
+    enable_wandb = True
+    save_model = True
 
     # Training parameters 
+    grad_norm_clip = None
     training_params = {
-        'num_epochs': 12000,
+        'num_epochs': 15000,
         'batch_size_train': 512,    
         'save_interval': 10,
         'thrown_object' : thrown_object,
@@ -31,7 +32,7 @@ def main():
         'loss1_weight': 1.0,
         'loss2_weight': 1.0,
         'loss2_1_weight': 0.0,
-        'weight_decay': 0.0001,
+        'weight_decay': 0.000001,
     }
     # Model parameters
     model_params = {
@@ -39,7 +40,7 @@ def main():
         'hidden_size': 128,
         'output_size': 9,
         'num_layers_lstm': 2,
-        'lr': 0.0001
+        'lr': 0.00005
     }
     data_params = {
         'data_step_start': 1,
@@ -82,7 +83,7 @@ def main():
         nae.init_wandb('nae-dynamic', run_id=wdb_run_id, resume=wdb_resume, wdb_notes=wdb_notes)
     saved_model_dir = nae.train(data_train, data_val, checkpoint_path=checkout_path, enable_wandb=enable_wandb, 
                                 test_anomaly=False, 
-                                test_cuda_blocking=False, save_model=save_model)
+                                test_cuda_blocking=False, save_model=save_model, grad_norm_clip=grad_norm_clip)
 
 if __name__ == '__main__':
     main()
