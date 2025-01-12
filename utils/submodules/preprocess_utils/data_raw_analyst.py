@@ -1,4 +1,4 @@
-from nae_core.utils.submodules.preprocess_utils.data_raw_reader import RoCatRLLabDataRawReader, RoCatNAEDataRawReader
+from nae_core.utils.submodules.preprocess_utils.data_raw_reader import RoCatDataRawReader
 # from utils.submodules.preprocess_utils.merger import RoCatRLLabDataMerger, RoCatNAEDataMerger
 from nae_core.utils.submodules.training_utils.input_label_generator import InputLabelGenerator
 from nae_core.utils.submodules.training_utils.data_loader import DataLoader as NAEDataLoader
@@ -492,9 +492,10 @@ def main():
     # print('len of last_lengths: ', len(last_lengths))
     # rocat_investigator.draw_histogram(last_lengths, bin_width, x_label, y_label, title)
 
-    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/dynamic_nae/nae_core/data/new_dataset_no_orientation/new_format/3_enrichment/frisbee/frisbee_enriched_267.npz'
-    thrown_object = 'check'
-    data_raw = RoCatRLLabDataRawReader(data_dir).read_position_data()
+    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bottle_115'
+    thrown_object = 'bottle'
+    data_raw = RoCatDataRawReader(data_dir).read()
+
 
     global_util_plotter.plot_trajectory_dataset_plotly(data_raw, title=thrown_object, rotate_data_whose_y_up=False)
 
