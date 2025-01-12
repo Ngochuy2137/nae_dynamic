@@ -1,0 +1,4 @@
+acc_threshold=(-15, 15)
+gap_threshold=3
+edge_margin=25
+min_len_threshold=80
