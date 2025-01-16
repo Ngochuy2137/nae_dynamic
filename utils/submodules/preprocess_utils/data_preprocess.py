@@ -611,6 +611,7 @@ class DataPreprocess(DataNormalizer):
                     self.plot_traj(data_raw[bad_idx], title=f'Trajectory {bad_idx}', traj_type='raw')  # plot raw trajectory
                     # plot acceleration
                     self.plot_acc(data_raw[bad_idx], note=f'Need to manually check - Trajectory {bad_idx}')
+                    input('Press Enter to continue...')
             
             # set_none = input('Do you want to set None for bad trajectories? (y/n): ')
             # if set_none == 'y':
@@ -845,8 +846,11 @@ def main():
     # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bottle_115'
     # object_name = 'Bottle'
 
-    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bottle_115'
-    object_name = f'bottle-butterworth-filter'
+    # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bottle_115'
+    # object_name = f'bottle-butterworth-filter'
+
+    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/utils/submodules/data_preprocessed/ring_frisbee/ring_frisbee_100'
+    object_name = f'ring_frisbee-butterworth-filter'
 
     data_raw = RoCatDataRawReader(data_dir).read()      # 'frame_num', 'time_step', 'position', 'quaternion'
     FS = 120 # Sampling frequency
@@ -873,8 +877,9 @@ def main():
     # ------------------------------------------------------------
     # 1. Apply Butterworth filter and interpolation
     # ------------------------------------------------------------
-    data_pp = data_preprocess.apply_butterworth_filter(data_pp, cutoff=CUTOFF, freq_samp=FS, butterworth_loop=1, debug=False)
-    input('Done applying ButterWorth filter. Press Enter to continue...')
+    if CUTOFF is not None:
+        data_pp = data_preprocess.apply_butterworth_filter(data_pp, cutoff=CUTOFF, freq_samp=FS, butterworth_loop=1, debug=False)
+        input('Done applying ButterWorth filter. Press Enter to continue...')
 
     # -------------------------------------------
     # 2. Interpolate velocities and accelerations
@@ -912,10 +917,11 @@ def main():
     # ------------------------------------------------------------
     # 3. Filter out outlier trajectories with outlier acceleration
     # ------------------------------------------------------------
-    cleaned_data, outlier_trajectories, traj_idxs_with_noise_treatment = data_preprocess.detect_acc_outlier(data_pp, acc_threshold=(-15, 15), gap_threshold=3, edge_margin=25, min_len_threshold=80, plot_outlier=True, debug=True)
-    global_util_printer.print_yellow(f'Number of outlier trajectories: {len(outlier_trajectories)}')
-    data_pp = cleaned_data
-    input('Done filtering outlier trajectories. Press Enter to continue...')
+    if CUTOFF is not None:
+        cleaned_data, outlier_trajectories, traj_idxs_with_noise_treatment = data_preprocess.detect_acc_outlier(data_pp, acc_threshold=(-100, 100), gap_threshold=3, edge_margin=25, min_len_threshold=80, plot_outlier=True, debug=True)
+        global_util_printer.print_yellow(f'Number of outlier trajectories: {len(outlier_trajectories)}')
+        data_pp = cleaned_data
+        input('Done filtering outlier trajectories. Press Enter to continue...')
                     
     # data_no_norm = copy.deepcopy(data_pp)   # deep copy
     # # plot acc
@@ -930,18 +936,22 @@ def main():
     data_pp = data_preprocess.normalize_data_features(data_pp, object_name, enable_norm_pos=NORM_POS, enable_norm_vel=NORM_VEL, enable_norm_acc=NORM_ACC, debug=False)
     input('Done normalizing acceleration. Press Enter to continue...')
 
-    # plot acc
-    data_preprocess.plot_acc(data_pp[0], note=f'Trajectory 0 - After Norm - BWfilter {CUTOFF}'); input()
-    # plot vel
-    data_preprocess.plot_vel(data_pp[0], note=f'Trajectory 0 - After Norm - BWfilter {CUTOFF}'); input()
-    # plot pos
-    data_preprocess.plot_pos(data_pp[0], note=f'Trajectory 0 - After Norm - BWfilter {CUTOFF}'); input()
+    # # plot acc
+    # data_preprocess.plot_acc(data_pp[0], note=f'Trajectory 0 - After Norm - BWfilter {CUTOFF}'); input()
+    # # plot vel
+    # data_preprocess.plot_vel(data_pp[0], note=f'Trajectory 0 - After Norm - BWfilter {CUTOFF}'); input()
+    # # plot pos
+    # data_preprocess.plot_pos(data_pp[0], note=f'Trajectory 0 - After Norm - BWfilter {CUTOFF}'); input()
 
 
     # ----------------------------------------
     # 5. Split data into train, val, test
     # ----------------------------------------
     data_train, data_val, data_test = data_preprocess.split_data(data_pp, split_ratio_train_val_test=(0.8, 0.1, 0.1), shuffle=True)
+    print('len data_train: ', len(data_train))
+    print('len data_val: ', len(data_val))
+    print('len data_test: ', len(data_test))
+    input()
     
     # -------------------------
     # 6. Save processed data

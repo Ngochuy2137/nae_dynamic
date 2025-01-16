@@ -58,6 +58,22 @@ class RoCatRLLabDataRawReader:
 # main
 if __name__ == '__main__':
     # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/data_preprocessed/Bamboo/data_train-134'
-    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bamboo_168'
-    data_raw_reader = RoCatDataRawReader(data_dir)
-    data = data_raw_reader.read()
+    # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bamboo_168'
+    # data_raw_reader = RoCatDataRawReader(data_dir)
+    # data = data_raw_reader.read()
+
+    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/mocap_ws/src/mocap_data_collection/data/frisbee_ring/min_len_65/15-01-2025_10-42-46-traj_num-102.npz'
+    thrown_object = 'ring_frisbee'
+    data_raw_reader = RoCatRLLabDataRawReader(data_dir)
+    data = data_raw_reader.read_raw_data()
+    print('len data[0] keys: ', data[0].keys()) # ['points', 'orientations', 'msg_ids', 'time_stamps', 'low_freq_num']
+    print('data[0]["points"]: ', data[0]['points'])
+    time = data[0]['time_stamps']
+    time = np.array(time) - time[0]
+    for t in time:
+        print(t)
+    # for i in range(1, len(time)):
+    #     if time[i] - time[1] < 1e-9:
+    #         global_util_printer.print_red(f'time[{i}]: {time[i]} - time[0]: {time[0]}')
+    #         input()
+    # global_util_printer.print_green('Time is correct')
