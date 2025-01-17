@@ -186,9 +186,10 @@ class DataDenormalizer():
         return denormalized_data
 
 class DataPreprocess(DataNormalizer):
-    def __init__(self, scaler_path=None, range_norm=(-0.5, 0.5)):
+    def __init__(self, object_name, scaler_path=None, range_norm=(-0.5, 0.5)):
         # Gọi hàm khởi tạo của class cha
         super().__init__(scaler_path, range_norm)
+        self.object_name = object_name
 
     def vel_interpolation(self, x_arr, t_arr, method='spline-k3-s0'):
         '''
@@ -354,7 +355,8 @@ class DataPreprocess(DataNormalizer):
     def get_s_k_values_from_string(self, method):
         match = re.search(r'k(?P<k>\d+)-s(?P<s>[\d.]+)', method)
         if not match:
-            raise ValueError("The string does not match the expected format 'k<number>-s<number>'")
+            global_util_printer.print_red("The string does not match the expected format 'k<number>-s<number>'")
+            return None, None
         # Extract k and s
         s_value = None if match.group('s') == 'None' else float(match.group('s'))
         k_value = int(match.group('k'))
@@ -611,6 +613,7 @@ class DataPreprocess(DataNormalizer):
                     self.plot_traj(data_raw[bad_idx], title=f'Trajectory {bad_idx}', traj_type='raw')  # plot raw trajectory
                     # plot acceleration
                     self.plot_acc(data_raw[bad_idx], note=f'Need to manually check - Trajectory {bad_idx}')
+                    self.plot_vel(data_raw[bad_idx], note=f'Need to manually check - Trajectory {bad_idx}')
                     input('Press Enter to continue...')
             
             # set_none = input('Do you want to set None for bad trajectories? (y/n): ')
@@ -651,13 +654,13 @@ class DataPreprocess(DataNormalizer):
 
     def plot_acc(self, data, note=''):
         acc = data['preprocess']['model_data'][:, 6:]
-        global_util_plotter.plot_line_chart(y_values=[acc[:, 0], acc[:, 1], acc[:, 2]], title=f'Acceleration - {note}', x_label='Frames', y_label='Acceleration m/s\u00b2', legends=['acc_x', 'acc_y', 'acc_z'])
+        global_util_plotter.plot_line_chart(y_values=[acc[:, 0], acc[:, 1], acc[:, 2]], title=f'{self.object_name} - Acceleration - {note}', x_label='Frames', y_label='Acceleration m/s\u00b2', legends=['acc_x', 'acc_y', 'acc_z'])
     def plot_vel(self, data, note=''):
         vel = data['preprocess']['model_data'][:, 3:6]
-        global_util_plotter.plot_line_chart(y_values=[vel[:, 0], vel[:, 1], vel[:, 2]], title=f'Velocity - {note}', x_label='Frames', y_label='Velocity m/s', legends=['vel_x', 'vel_y', 'vel_z'])
+        global_util_plotter.plot_line_chart(y_values=[vel[:, 0], vel[:, 1], vel[:, 2]], title=f'{self.object_name} - Velocity - {note}', x_label='Frames', y_label='Velocity m/s', legends=['vel_x', 'vel_y', 'vel_z'])
     def plot_pos(self, data, note=''):
         pos = data['preprocess']['model_data'][:, :3]
-        global_util_plotter.plot_line_chart(y_values=[pos[:, 0], pos[:, 1], pos[:, 2]], title=f'Position - {note}', x_label='Frames', y_label='Position m', legends=['pos_x', 'pos_y', 'pos_z'])
+        global_util_plotter.plot_line_chart(y_values=[pos[:, 0], pos[:, 1], pos[:, 2]], title=f'{self.object_name} - Position - {note}', x_label='Frames', y_label='Position m', legends=['pos_x', 'pos_y', 'pos_z'])
 
     def backup_data(self, data, object_name):
         '''
@@ -849,31 +852,31 @@ def main():
     # data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/data/nae_paper_dataset/origin/trimmed_Bottle_115'
     # object_name = f'bottle-butterworth-filter'
 
-    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/nae_fix_dismiss_acc/nae_core/utils/submodules/data_preprocessed/ring_frisbee/ring_frisbee_100'
-    object_name = f'ring_frisbee-butterworth-filter'
+    data_dir = '/home/server-huynn/workspace/robot_catching_project/trajectory_prediction/mocap_ws/src/mocap_data_collection/data/chip_star/2-position_treatment/npz'
+    object_name = 'chip_star'
 
     data_raw = RoCatDataRawReader(data_dir).read()      # 'frame_num', 'time_step', 'position', 'quaternion'
     FS = 120 # Sampling frequency
     CUTOFF = 15 # Cutoff frequency
-    CUBIC_SPLINE = 'spline-k3-s0'
+    INTERPOLATE_METHOD = 'linear'     # spline, linear, manual
 
     RANGE_NORM = (-0.5, 0.5)
     NORM_POS = False
     NORM_VEL = False
     NORM_ACC = True
+    OUTLIER_ABS_ACC_THRESHOLD_CHECK = 100
 
 
-
-    object_name = object_name + f'-cutoff-{CUTOFF}'
-    data_preprocess = DataPreprocess(range_norm=RANGE_NORM)
-    s_value, k_value = data_preprocess.get_s_k_values_from_string(CUBIC_SPLINE)
+    if CUTOFF:
+        object_name = object_name + f'-BW-cof-{CUTOFF}'
+    data_preprocess = DataPreprocess(range_norm=RANGE_NORM, object_name=object_name)
+    s_value, k_value = data_preprocess.get_s_k_values_from_string(INTERPOLATE_METHOD)
     print(f"Found SPLINE configure: s: {s_value}, k: {k_value}")
 
     # ------------------------------------------------------------
     # 0. Create a new field 'original' in data_raw to store the original data
     # ------------------------------------------------------------
     data_pp = data_preprocess.backup_data(data_raw, object_name)
-    # data_pp_no_filter = data_preprocess.vel_acc_interpolation(data_pp, interpolate_method=CUBIC_SPLINE)
     # ------------------------------------------------------------
     # 1. Apply Butterworth filter and interpolation
     # ------------------------------------------------------------
@@ -884,65 +887,38 @@ def main():
     # -------------------------------------------
     # 2. Interpolate velocities and accelerations
     # -------------------------------------------
-    data_pp = data_preprocess.vel_acc_interpolation(data_pp, interpolate_method=CUBIC_SPLINE)
+    data_pp = data_preprocess.vel_acc_interpolation(data_pp, interpolate_method=INTERPOLATE_METHOD)
     input('Done interpolating velocities and accelerations. Press Enter to continue...')
     # data_preprocess.plot_acc(data_pp[0], note='Trajectory 0 - Before normalization'); input()
-
-
 
     bad_count = 0
     for idx, traj in enumerate(data_pp):
         # get acc data
         acc_data = traj['preprocess']['model_data'][:, 6:].copy()
         for a_p in acc_data:
-            thres = 20
-            if abs(a_p[0]) > thres or abs(a_p[1]) > thres or abs(a_p[2]) > thres:
-                # plot raw data
-                # data_preprocess.plot_data(data_pp_no_filter, idx, note='without Butterworth filter', plot_acc=True)
-                # # plot preprocess data
-                # data_preprocess.plot_data(data_pp, idx, note='with Butterworth filter', plot_acc=True); input()
+            if abs(a_p[0]) > OUTLIER_ABS_ACC_THRESHOLD_CHECK or abs(a_p[1]) > OUTLIER_ABS_ACC_THRESHOLD_CHECK or abs(a_p[2]) > OUTLIER_ABS_ACC_THRESHOLD_CHECK:
                 bad_count += 1
                 break
     input(f'bad_count: {bad_count}')
-
-    # data_preprocess.plot_data(data_pp, 4, note='with Butterworth filter', plot_acc=True, plot_vel=True)
-    # data_preprocess.plot_data(data_pp, 18, note='with Butterworth filter', plot_acc=True, plot_vel=True)
-    # data_preprocess.plot_data(data_pp, 23, note='with Butterworth filter', plot_acc=True, plot_vel=True)
-    # data_preprocess.plot_data(data_pp, 31, note='with Butterworth filter', plot_acc=True, plot_vel=True)
-    # data_preprocess.plot_data(data_pp, 45, note='with Butterworth filter', plot_acc=True, plot_vel=True)
-    # data_preprocess.plot_data(data_pp, 61, note='with Butterworth filter', plot_acc=True, plot_vel=True)
-    # input()
 
     # data_preprocess.check_parabol_preprocessed_data(data_pp)
     # ------------------------------------------------------------
     # 3. Filter out outlier trajectories with outlier acceleration
     # ------------------------------------------------------------
     if CUTOFF is not None:
-        cleaned_data, outlier_trajectories, traj_idxs_with_noise_treatment = data_preprocess.detect_acc_outlier(data_pp, acc_threshold=(-100, 100), gap_threshold=3, edge_margin=25, min_len_threshold=80, plot_outlier=True, debug=True)
+        cleaned_data, outlier_trajectories, traj_idxs_with_noise_treatment = data_preprocess.detect_acc_outlier(data_pp, acc_threshold=(-OUTLIER_ABS_ACC_THRESHOLD_CHECK, OUTLIER_ABS_ACC_THRESHOLD_CHECK), gap_threshold=3, edge_margin=25, min_len_threshold=80, plot_outlier=True, debug=True)
         global_util_printer.print_yellow(f'Number of outlier trajectories: {len(outlier_trajectories)}')
         data_pp = cleaned_data
         input('Done filtering outlier trajectories. Press Enter to continue...')
-                    
-    # data_no_norm = copy.deepcopy(data_pp)   # deep copy
-    # # plot acc
-    # data_preprocess.plot_acc(data_no_norm[0], note='Trajectory 0 - Before Norm'); input()
-    # # plot vel
-    # data_preprocess.plot_vel(data_no_norm[0], note='Trajectory 0 - Before Norm'); input()
-    # # plot pos
-    # data_preprocess.plot_pos(data_no_norm[0], note='Trajectory 0 - Before Norm'); input()
+    
+    # plot trajectory 0
+    data_preprocess.plot_data(data_pp, 0, note='Trajectory 0 - After filtering outlier', plot_acc=True, plot_vel=True, plot_pos=True); input()
+
     # ----------------------------------------
     # 4. Normalize acceleration on all dataset
     # ----------------------------------------
     data_pp = data_preprocess.normalize_data_features(data_pp, object_name, enable_norm_pos=NORM_POS, enable_norm_vel=NORM_VEL, enable_norm_acc=NORM_ACC, debug=False)
     input('Done normalizing acceleration. Press Enter to continue...')
-
-    # # plot acc
-    # data_preprocess.plot_acc(data_pp[0], note=f'Trajectory 0 - After Norm - BWfilter {CUTOFF}'); input()
-    # # plot vel
-    # data_preprocess.plot_vel(data_pp[0], note=f'Trajectory 0 - After Norm - BWfilter {CUTOFF}'); input()
-    # # plot pos
-    # data_preprocess.plot_pos(data_pp[0], note=f'Trajectory 0 - After Norm - BWfilter {CUTOFF}'); input()
-
 
     # ----------------------------------------
     # 5. Split data into train, val, test
